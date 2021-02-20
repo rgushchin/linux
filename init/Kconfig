@@ -1840,6 +1840,17 @@ config VM_EVENT_COUNTERS
 	  on EXPERT systems.  /proc/vmstat will only show page counts
 	  if VM event counters are disabled.
 
+config PAGEBLOCK_STATS
+	default n
+	bool "Enable pageblock counters exported via /proc/pageblocks"
+	depends on PROC_FS
+	help
+	  This option enabled collecting and exporting pageblock counters,
+	  which can be useful for debugging various mm problems around
+	  memory fragmentation.
+
+	  Say N if unsure
+
 config SLUB_DEBUG
 	default y
 	bool "Enable SLUB debugging support" if EXPERT
