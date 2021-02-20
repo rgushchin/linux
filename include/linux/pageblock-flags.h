@@ -58,7 +58,7 @@ unsigned long get_pfnblock_flags_mask(struct page *page,
 				unsigned long pfn,
 				unsigned long mask);
 
-void set_pfnblock_flags_mask(struct page *page,
+unsigned long set_pfnblock_flags_mask(struct page *page,
 				unsigned long flags,
 				unsigned long pfn,
 				unsigned long mask);
