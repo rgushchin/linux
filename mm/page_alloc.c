@@ -173,6 +173,12 @@ static long pageblock_stats[MIGRATE_TYPES] __read_mostly;
 static DEFINE_PER_CPU(long[MIGRATE_TYPES], pageblock_stats_pcpu);
 #endif
 
+struct page_alloc_stat {
+	unsigned long requests[MAX_ORDER];
+	unsigned long failures[MAX_ORDER];
+};
+static DEFINE_PER_CPU(struct page_alloc_stat, alloc_stats_pcpu);
+
 int percpu_pagelist_fraction;
 gfp_t gfp_allowed_mask __read_mostly = GFP_BOOT_MASK;
 DEFINE_STATIC_KEY_FALSE(init_on_alloc);
@@ -5016,6 +5022,7 @@ __alloc_pages_nodemask(gfp_t gfp_mask, unsigned int order, int preferred_nid,
 	unsigned int alloc_flags = ALLOC_WMARK_LOW;
 	gfp_t alloc_mask; /* The gfp_t that was actually used for allocation */
 	struct alloc_context ac = { };
+	struct page_alloc_stat *stats = this_cpu_ptr(&alloc_stats_pcpu);
 
 	/*
 	 * There are several places where we assume that the order value is sane
@@ -5025,6 +5032,8 @@ __alloc_pages_nodemask(gfp_t gfp_mask, unsigned int order, int preferred_nid,
 		WARN_ON_ONCE(!(gfp_mask & __GFP_NOWARN));
 		return NULL;
 	}
+
+	stats->requests[order]++;
 
 	gfp_mask &= gfp_allowed_mask;
 	alloc_mask = gfp_mask;
@@ -5060,6 +5069,9 @@ __alloc_pages_nodemask(gfp_t gfp_mask, unsigned int order, int preferred_nid,
 	page = __alloc_pages_slowpath(alloc_mask, order, &ac);
 
 out:
+	if (unlikely(page == NULL))
+		stats->failures[order]++;
+
 	if (memcg_kmem_enabled() && (gfp_mask & __GFP_ACCOUNT) && page &&
 	    unlikely(__memcg_kmem_charge_page(page, gfp_mask, order) != 0)) {
 		__free_pages(page, order);
@@ -9057,4 +9069,36 @@ static int __init proc_pageblocks_init(void)
 	return 0;
 }
 fs_initcall(proc_pageblocks_init);
+#endif
+
+#ifdef CONFIG_PROC_FS
+static int page_allocs_proc_show(struct seq_file *m, void *v)
+{
+	unsigned long allocs, failures;
+	struct page_alloc_stat *stats;
+	int cpu, order;
+
+	for (order = 0; order < MAX_ORDER; order++) {
+		allocs = 0;
+		failures = 0;
+
+		for_each_possible_cpu(cpu) {
+			stats = per_cpu_ptr(&alloc_stats_pcpu, cpu);
+
+			allocs += stats->requests[order];
+			failures += stats->failures[order];
+		}
+
+		seq_printf(m, "%-2d %10lu %10lu\n", order, allocs, failures);
+	}
+
+	return 0;
+}
+
+static int __init page_alloc_stats_init(void)
+{
+	proc_create_single("page_allocs", 0, NULL, page_allocs_proc_show);
+	return 0;
+}
+fs_initcall(page_alloc_stats_init);
 #endif
