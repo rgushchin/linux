@@ -1,0 +1,57 @@
+Scheduler BPF
+
+There is a long history of distro people, system administrators, and
+application owners tuning the CFS settings in /proc/sys, which are now
+in debugfs. Looking at what these settings actually did, it ended up
+boiling down to changing the likelihood of task preemption, or
+disabling it by setting the wakeup_granularity_ns to more than half of
+the latency_ns. The other settings didn't really do much for
+performance.
+
+In other words, some our workloads benefit by having long running tasks
+preempted by tasks handling short running requests, and some workloads
+that run only short term requests which benefit from never being preempted.
+
+This leads to a few observations and ideas:
+- Different workloads want different policies. Being able to configure
+  the policy per workload could be useful.
+- A workload that benefits from not being preempted itself could still
+  benefit from preempting (low priority) background system tasks.
+- It would be useful to quickly (and safely) experiment with different
+  policies in production, without having to shut down applications or reboot
+  systems, to determine what the policies for different workloads should be.
+- Only a few workloads are large and sensitive enough to merit their own
+  policy tweaks. CFS by itself should be good enough for everything else,
+  and we probably do not want policy tweaks to be a replacement for anything
+  CFS does.
+
+This leads to BPF hooks, which have been successfully used in various
+kernel subsystems to provide a way for external code to (safely)
+change a few kernel decisions. BPF tooling makes this pretty easy to do,
+and the people deploying BPF scripts are already quite used to updating them
+for new kernel versions.
+
+This patchset aims to start a discussion about potential applications of BPF
+to the scheduler. It also aims to land some very basic BPF infrastructure
+necessary to add new BPF hooks to the scheduler, a minimal set of useful
+helpers, corresponding libbpf changes, etc.
+
+Our very first experiments with using BPF in CFS look very promising. We're
+at a very early stage, however already have seen a nice latency and ~1% RPS
+wins for our (Facebook's) main web workload.
+
+As I know, Google is working on a more radical approach [2]: they aim to move
+the scheduling code into userspace. It seems that their core motivation is
+somewhat similar: to make the scheduler changes easier to develop, validate
+and deploy. Even though their approach is different, they also use BPF for
+speeding up some hot paths. I think the suggested infrastructure can serve
+their purpose too.
+
+An example of an userspace part, which loads some simple hooks is available
+here [3]. It's very simple, provided only to simplify playing with the provided
+kernel patches.
+
+
+[1] c722f35b513f ("sched/fair: Bring back select_idle_smt(), but differently")
+[2] Google's ghOSt: https://linuxplumbersconf.org/event/11/contributions/954/
+[3] https://github.com/rgushchin/atc
