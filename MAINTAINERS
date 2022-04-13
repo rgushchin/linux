@@ -201,6 +201,7 @@ F:	include/net/ieee80211_radiotap.h
 F:	include/net/iw_handler.h
 F:	include/net/wext.h
 F:	include/uapi/linux/nl80211.h
+F:	include/uapi/linux/wireless.h
 F:	net/wireless/
 
 8169 10/100/1000 GIGABIT ETHERNET DRIVER
@@ -819,7 +820,7 @@ S:	Maintained
 F:	drivers/mailbox/mailbox-altera.c
 
 ALTERA MSGDMA IP CORE DRIVER
-M:	Olivier Dautricourt <olivier.dautricourt@orolia.com>
+M:	Olivier Dautricourt <olivierdautricourt@gmail.com>
 R:	Stefan Roese <sr@denx.de>
 L:	dmaengine@vger.kernel.org
 S:	Odd Fixes
@@ -1043,7 +1044,6 @@ F:	arch/arm64/boot/dts/amd/amd-seattle-xgbe*.dtsi
 F:	drivers/net/ethernet/amd/xgbe/
 
 AMD SENSOR FUSION HUB DRIVER
-M:	Nehal Shah <nehal-bakulchandra.shah@amd.com>
 M:	Basavaraj Natikar <basavaraj.natikar@amd.com>
 L:	linux-input@vger.kernel.org
 S:	Maintained
@@ -1362,10 +1362,13 @@ F:	include/uapi/linux/apm_bios.h
 
 APPARMOR SECURITY MODULE
 M:	John Johansen <john.johansen@canonical.com>
-L:	apparmor@lists.ubuntu.com (subscribers-only, general discussion)
+L:	apparmor@lists.ubuntu.com (moderated for non-subscribers)
 S:	Supported
-W:	wiki.apparmor.net
+W:	apparmor.net
+B:	https://gitlab.com/apparmor/apparmor-kernel
+C:	irc://irc.oftc.net/apparmor
 T:	git git://git.kernel.org/pub/scm/linux/kernel/git/jj/linux-apparmor
+T:	https://gitlab.com/apparmor/apparmor-kernel.git
 F:	Documentation/admin-guide/LSM/apparmor.rst
 F:	security/apparmor/
 
@@ -1525,10 +1528,7 @@ F:	Documentation/devicetree/bindings/mtd/mtd-physmap.yaml
 F:	arch/arm/boot/dts/arm-realview-*
 F:	arch/arm/boot/dts/integrator*
 F:	arch/arm/boot/dts/versatile*
-F:	arch/arm/mach-integrator/
-F:	arch/arm/mach-realview/
 F:	arch/arm/mach-versatile/
-F:	arch/arm/plat-versatile/
 F:	drivers/bus/arm-integrator-lm.c
 F:	drivers/clk/versatile/
 F:	drivers/i2c/busses/i2c-versatile.c
@@ -1837,6 +1837,7 @@ F:	Documentation/devicetree/bindings/clock/apple,nco.yaml
 F:	Documentation/devicetree/bindings/i2c/apple,i2c.yaml
 F:	Documentation/devicetree/bindings/interrupt-controller/apple,*
 F:	Documentation/devicetree/bindings/mailbox/apple,mailbox.yaml
+F:	Documentation/devicetree/bindings/nvmem/apple,efuses.yaml
 F:	Documentation/devicetree/bindings/pci/apple,pcie.yaml
 F:	Documentation/devicetree/bindings/pinctrl/apple,pinctrl.yaml
 F:	Documentation/devicetree/bindings/power/apple*
@@ -1847,6 +1848,7 @@ F:	drivers/i2c/busses/i2c-pasemi-core.c
 F:	drivers/i2c/busses/i2c-pasemi-platform.c
 F:	drivers/irqchip/irq-apple-aic.c
 F:	drivers/mailbox/apple-mailbox.c
+F:	drivers/nvmem/apple-efuses.c
 F:	drivers/pinctrl/pinctrl-apple-gpio.c
 F:	drivers/soc/apple/*
 F:	drivers/watchdog/apple_wdt.c
@@ -2636,7 +2638,7 @@ F:	sound/soc/rockchip/
 N:	rockchip
 
 ARM/SAMSUNG S3C, S5P AND EXYNOS ARM ARCHITECTURES
-M:	Krzysztof Kozlowski <krzk@kernel.org>
+M:	Krzysztof Kozlowski <krzysztof.kozlowski@linaro.org>
 R:	Alim Akhtar <alim.akhtar@samsung.com>
 L:	linux-arm-kernel@lists.infradead.org (moderated for non-subscribers)
 L:	linux-samsung-soc@vger.kernel.org
@@ -4688,10 +4690,12 @@ CIRRUS LOGIC AUDIO CODEC DRIVERS
 M:	James Schulman <james.schulman@cirrus.com>
 M:	David Rhodes <david.rhodes@cirrus.com>
 M:	Lucas Tanure <tanureal@opensource.cirrus.com>
+M:	Richard Fitzgerald <rf@opensource.cirrus.com>
 L:	alsa-devel@alsa-project.org (moderated for non-subscribers)
 L:	patches@opensource.cirrus.com
 S:	Maintained
 F:	Documentation/devicetree/bindings/sound/cirrus,cs*
+F:	include/dt-bindings/sound/cs*
 F:	sound/pci/hda/cs*
 F:	sound/soc/codecs/cs*
 
@@ -6308,6 +6312,11 @@ S:	Maintained
 F:	Documentation/devicetree/bindings/display/panel/olimex,lcd-olinuxino.yaml
 F:	drivers/gpu/drm/panel/panel-olimex-lcd-olinuxino.c
 
+DRM DRIVER FOR PARADE PS8640 BRIDGE CHIP
+R:	Douglas Anderson <dianders@chromium.org>
+F:	Documentation/devicetree/bindings/display/bridge/ps8640.yaml
+F:	drivers/gpu/drm/bridge/parade-ps8640.c
+
 DRM DRIVER FOR PERVASIVE DISPLAYS REPAPER PANELS
 M:	Noralf Trønnes <noralf@tronnes.org>
 S:	Maintained
@@ -6420,6 +6429,11 @@ F:	drivers/gpu/drm/mcde/
 DRM DRIVER FOR TDFX VIDEO CARDS
 S:	Orphan / Obsolete
 F:	drivers/gpu/drm/tdfx/
+
+DRM DRIVER FOR TI SN65DSI86 BRIDGE CHIP
+R:	Douglas Anderson <dianders@chromium.org>
+F:	Documentation/devicetree/bindings/display/bridge/ti,sn65dsi86.yaml
+F:	drivers/gpu/drm/bridge/ti-sn65dsi86.c
 
 DRM DRIVER FOR TPO TPG110 PANELS
 M:	Linus Walleij <linus.walleij@linaro.org>
@@ -6540,6 +6554,7 @@ R:	Jonas Karlman <jonas@kwiboo.se>
 R:	Jernej Skrabec <jernej.skrabec@gmail.com>
 S:	Maintained
 T:	git git://anongit.freedesktop.org/drm/drm-misc
+F:	Documentation/devicetree/bindings/display/bridge/
 F:	drivers/gpu/drm/bridge/
 
 DRM DRIVERS FOR EXYNOS
@@ -8552,17 +8567,6 @@ L:	linux-efi@vger.kernel.org
 S:	Maintained
 F:	block/partitions/efi.*
 
-H8/300 ARCHITECTURE
-M:	Yoshinori Sato <ysato@users.sourceforge.jp>
-L:	uclinux-h8-devel@lists.sourceforge.jp (moderated for non-subscribers)
-S:	Maintained
-W:	http://uclinux-h8.sourceforge.jp
-T:	git git://git.sourceforge.jp/gitroot/uclinux-h8/linux.git
-F:	arch/h8300/
-F:	drivers/clk/h8300/
-F:	drivers/clocksource/h8300_*.c
-F:	drivers/irqchip/irq-renesas-h8*.c
-
 HABANALABS PCI DRIVER
 M:	Oded Gabbay <ogabbay@kernel.org>
 S:	Supported
@@ -9000,7 +9004,7 @@ S:	Maintained
 F:	drivers/input/touchscreen/htcpen.c
 
 HTS221 TEMPERATURE-HUMIDITY IIO DRIVER
-M:	Lorenzo Bianconi <lorenzo.bianconi83@gmail.com>
+M:	Lorenzo Bianconi <lorenzo@kernel.org>
 L:	linux-iio@vger.kernel.org
 S:	Maintained
 W:	http://www.st.com/
@@ -10908,6 +10912,7 @@ F:	drivers/tty/serial/kgdboc.c
 F:	include/linux/kdb.h
 F:	include/linux/kgdb.h
 F:	kernel/debug/
+F:	kernel/module/kdb.c
 
 KHADAS MCU MFD DRIVER
 M:	Neil Armstrong <narmstrong@baylibre.com>
@@ -11361,6 +11366,7 @@ F:	arch/s390/include/asm/livepatch.h
 F:	arch/x86/include/asm/livepatch.h
 F:	include/linux/livepatch.h
 F:	kernel/livepatch/
+F:	kernel/module/livepatch.c
 F:	lib/livepatch/
 F:	samples/livepatch/
 F:	tools/testing/selftests/livepatch/
@@ -11826,7 +11832,7 @@ MARVELL XENON MMC/SD/SDIO HOST CONTROLLER DRIVER
 M:	Hu Ziji <huziji@marvell.com>
 L:	linux-mmc@vger.kernel.org
 S:	Supported
-F:	Documentation/devicetree/bindings/mmc/marvell,xenon-sdhci.txt
+F:	Documentation/devicetree/bindings/mmc/marvell,xenon-sdhci.yaml
 F:	drivers/mmc/host/sdhci-xenon*
 
 MATROX FRAMEBUFFER DRIVER
@@ -11906,7 +11912,7 @@ F:	drivers/iio/proximity/mb1232.c
 
 MAXIM MAX17040 FAMILY FUEL GAUGE DRIVERS
 R:	Iskren Chernev <iskren.chernev@gmail.com>
-R:	Krzysztof Kozlowski <krzk@kernel.org>
+R:	Krzysztof Kozlowski <krzysztof.kozlowski@linaro.org>
 R:	Marek Szyprowski <m.szyprowski@samsung.com>
 R:	Matheus Castello <matheus@castello.eng.br>
 L:	linux-pm@vger.kernel.org
@@ -11916,7 +11922,7 @@ F:	drivers/power/supply/max17040_battery.c
 
 MAXIM MAX17042 FAMILY FUEL GAUGE DRIVERS
 R:	Hans de Goede <hdegoede@redhat.com>
-R:	Krzysztof Kozlowski <krzk@kernel.org>
+R:	Krzysztof Kozlowski <krzysztof.kozlowski@linaro.org>
 R:	Marek Szyprowski <m.szyprowski@samsung.com>
 R:	Sebastian Krzyszkowiak <sebastian.krzyszkowiak@puri.sm>
 R:	Purism Kernel Team <kernel@puri.sm>
@@ -11968,7 +11974,7 @@ F:	Documentation/devicetree/bindings/power/supply/maxim,max77976.yaml
 F:	drivers/power/supply/max77976_charger.c
 
 MAXIM MUIC CHARGER DRIVERS FOR EXYNOS BASED BOARDS
-M:	Krzysztof Kozlowski <krzk@kernel.org>
+M:	Krzysztof Kozlowski <krzysztof.kozlowski@linaro.org>
 M:	Bartlomiej Zolnierkiewicz <b.zolnierkie@samsung.com>
 L:	linux-pm@vger.kernel.org
 S:	Supported
@@ -11979,7 +11985,7 @@ F:	drivers/power/supply/max77693_charger.c
 
 MAXIM PMIC AND MUIC DRIVERS FOR EXYNOS BASED BOARDS
 M:	Chanwoo Choi <cw00.choi@samsung.com>
-M:	Krzysztof Kozlowski <krzk@kernel.org>
+M:	Krzysztof Kozlowski <krzysztof.kozlowski@linaro.org>
 M:	Bartlomiej Zolnierkiewicz <b.zolnierkie@samsung.com>
 L:	linux-kernel@vger.kernel.org
 S:	Supported
@@ -12357,7 +12363,7 @@ MEDIATEK I2C CONTROLLER DRIVER
 M:	Qii Wang <qii.wang@mediatek.com>
 L:	linux-i2c@vger.kernel.org
 S:	Maintained
-F:	Documentation/devicetree/bindings/i2c/i2c-mt65xx.txt
+F:	Documentation/devicetree/bindings/i2c/i2c-mt65xx.yaml
 F:	drivers/i2c/busses/i2c-mt65xx.c
 
 MEDIATEK IOMMU DRIVER
@@ -12402,7 +12408,7 @@ F:	drivers/mmc/host/mtk-sd.c
 
 MEDIATEK MT76 WIRELESS LAN DRIVER
 M:	Felix Fietkau <nbd@nbd.name>
-M:	Lorenzo Bianconi <lorenzo.bianconi83@gmail.com>
+M:	Lorenzo Bianconi <lorenzo@kernel.org>
 M:	Ryder Lee <ryder.lee@mediatek.com>
 R:	Shayne Chen <shayne.chen@mediatek.com>
 R:	Sean Wang <sean.wang@mediatek.com>
@@ -12673,7 +12679,7 @@ F:	mm/memblock.c
 F:	tools/testing/memblock/
 
 MEMORY CONTROLLER DRIVERS
-M:	Krzysztof Kozlowski <krzk@kernel.org>
+M:	Krzysztof Kozlowski <krzysztof.kozlowski@linaro.org>
 L:	linux-kernel@vger.kernel.org
 S:	Maintained
 T:	git git://git.kernel.org/pub/scm/linux/kernel/git/krzk/linux-mem-ctrl.git
@@ -12794,7 +12800,7 @@ F:	arch/arm64/boot/dts/marvell/armada-3720-uDPU.dts
 
 MHI BUS
 M:	Manivannan Sadhasivam <manivannan.sadhasivam@linaro.org>
-R:	Hemant Kumar <hemantk@codeaurora.org>
+R:	Hemant Kumar <quic_hemantk@quicinc.com>
 L:	mhi@lists.linux.dev
 L:	linux-arm-msm@vger.kernel.org
 S:	Maintained
@@ -13265,7 +13271,7 @@ L:	linux-kernel@vger.kernel.org
 S:	Maintained
 T:	git git://git.kernel.org/pub/scm/linux/kernel/git/mcgrof/linux.git modules-next
 F:	include/linux/module.h
-F:	kernel/module.c
+F:	kernel/module/
 
 MONOLITHIC POWER SYSTEM PMIC DRIVER
 M:	Saravanan Sekar <sravanhome@gmail.com>
@@ -13817,7 +13823,7 @@ F:	include/uapi/linux/nexthop.h
 F:	net/ipv4/nexthop.c
 
 NFC SUBSYSTEM
-M:	Krzysztof Kozlowski <krzk@kernel.org>
+M:	Krzysztof Kozlowski <krzysztof.kozlowski@linaro.org>
 L:	linux-nfc@lists.01.org (subscribers-only)
 L:	netdev@vger.kernel.org
 S:	Maintained
@@ -14134,7 +14140,7 @@ F:	Documentation/devicetree/bindings/regulator/nxp,pf8x00-regulator.yaml
 F:	drivers/regulator/pf8x00-regulator.c
 
 NXP PTN5150A CC LOGIC AND EXTCON DRIVER
-M:	Krzysztof Kozlowski <krzk@kernel.org>
+M:	Krzysztof Kozlowski <krzysztof.kozlowski@linaro.org>
 L:	linux-kernel@vger.kernel.org
 S:	Maintained
 F:	Documentation/devicetree/bindings/extcon/extcon-ptn5150.yaml
@@ -14687,7 +14693,7 @@ F:	scripts/dtc/
 
 OPEN FIRMWARE AND FLATTENED DEVICE TREE BINDINGS
 M:	Rob Herring <robh+dt@kernel.org>
-M:	Krzysztof Kozlowski <krzk+dt@kernel.org>
+M:	Krzysztof Kozlowski <krzysztof.kozlowski+dt@linaro.org>
 L:	devicetree@vger.kernel.org
 S:	Maintained
 C:	irc://irc.libera.chat/devicetree
@@ -15357,7 +15363,7 @@ PCIE DRIVER FOR SOCIONEXT UNIPHIER
 M:	Kunihiko Hayashi <hayashi.kunihiko@socionext.com>
 L:	linux-pci@vger.kernel.org
 S:	Maintained
-F:	Documentation/devicetree/bindings/pci/uniphier-pcie*
+F:	Documentation/devicetree/bindings/pci/socionext,uniphier-pcie*
 F:	drivers/pci/controller/dwc/pcie-uniphier*
 
 PCIE DRIVER FOR ST SPEAR13XX
@@ -15599,7 +15605,7 @@ F:	drivers/pinctrl/renesas/
 
 PIN CONTROLLER - SAMSUNG
 M:	Tomasz Figa <tomasz.figa@gmail.com>
-M:	Krzysztof Kozlowski <krzk@kernel.org>
+M:	Krzysztof Kozlowski <krzysztof.kozlowski@linaro.org>
 M:	Sylwester Nawrocki <s.nawrocki@samsung.com>
 R:	Alim Akhtar <alim.akhtar@samsung.com>
 L:	linux-arm-kernel@lists.infradead.org (moderated for non-subscribers)
@@ -17137,6 +17143,21 @@ L:	linux-rdma@vger.kernel.org
 S:	Maintained
 F:	drivers/infiniband/ulp/rtrs/
 
+RUST
+M:	Miguel Ojeda <ojeda@kernel.org>
+M:	Alex Gaynor <alex.gaynor@gmail.com>
+M:	Wedson Almeida Filho <wedsonaf@google.com>
+L:	rust-for-linux@vger.kernel.org
+S:	Supported
+W:	https://github.com/Rust-for-Linux/linux
+B:	https://github.com/Rust-for-Linux/linux/issues
+T:	git https://github.com/Rust-for-Linux/linux.git rust-next
+F:	rust/
+F:	samples/rust/
+F:	Documentation/rust/
+F:	scripts/*rust*
+K:	\b(?i:rust)\b
+
 RXRPC SOCKETS (AF_RXRPC)
 M:	David Howells <dhowells@redhat.com>
 M:	Marc Dionne <marc.dionne@auristor.com>
@@ -17273,7 +17294,7 @@ W:	http://www.ibm.com/developerworks/linux/linux390/
 F:	drivers/s390/scsi/zfcp_*
 
 S3C ADC BATTERY DRIVER
-M:	Krzysztof Kozlowski <krzk@kernel.org>
+M:	Krzysztof Kozlowski <krzysztof.kozlowski@linaro.org>
 L:	linux-samsung-soc@vger.kernel.org
 S:	Odd Fixes
 F:	drivers/power/supply/s3c_adc_battery.c
@@ -17318,7 +17339,7 @@ F:	Documentation/admin-guide/LSM/SafeSetID.rst
 F:	security/safesetid/
 
 SAMSUNG AUDIO (ASoC) DRIVERS
-M:	Krzysztof Kozlowski <krzk@kernel.org>
+M:	Krzysztof Kozlowski <krzysztof.kozlowski@linaro.org>
 M:	Sylwester Nawrocki <s.nawrocki@samsung.com>
 L:	alsa-devel@alsa-project.org (moderated for non-subscribers)
 S:	Supported
@@ -17326,7 +17347,7 @@ F:	Documentation/devicetree/bindings/sound/samsung*
 F:	sound/soc/samsung/
 
 SAMSUNG EXYNOS PSEUDO RANDOM NUMBER GENERATOR (RNG) DRIVER
-M:	Krzysztof Kozlowski <krzk@kernel.org>
+M:	Krzysztof Kozlowski <krzysztof.kozlowski@linaro.org>
 L:	linux-crypto@vger.kernel.org
 L:	linux-samsung-soc@vger.kernel.org
 S:	Maintained
@@ -17361,7 +17382,7 @@ S:	Maintained
 F:	drivers/platform/x86/samsung-laptop.c
 
 SAMSUNG MULTIFUNCTION PMIC DEVICE DRIVERS
-M:	Krzysztof Kozlowski <krzk@kernel.org>
+M:	Krzysztof Kozlowski <krzysztof.kozlowski@linaro.org>
 M:	Bartlomiej Zolnierkiewicz <b.zolnierkie@samsung.com>
 L:	linux-kernel@vger.kernel.org
 L:	linux-samsung-soc@vger.kernel.org
@@ -17387,7 +17408,7 @@ F:	drivers/media/platform/samsung/s3c-camif/
 F:	include/media/drv-intf/s3c_camif.h
 
 SAMSUNG S3FWRN5 NFC DRIVER
-M:	Krzysztof Kozlowski <krzk@kernel.org>
+M:	Krzysztof Kozlowski <krzysztof.kozlowski@linaro.org>
 M:	Krzysztof Opasiak <k.opasiak@samsung.com>
 L:	linux-nfc@lists.01.org (subscribers-only)
 S:	Maintained
@@ -17409,7 +17430,7 @@ S:	Supported
 F:	drivers/media/i2c/s5k5baf.c
 
 SAMSUNG S5P Security SubSystem (SSS) DRIVER
-M:	Krzysztof Kozlowski <krzk@kernel.org>
+M:	Krzysztof Kozlowski <krzysztof.kozlowski@linaro.org>
 M:	Vladimir Zapolskiy <vz@mleia.com>
 L:	linux-crypto@vger.kernel.org
 L:	linux-samsung-soc@vger.kernel.org
@@ -17444,7 +17465,7 @@ F:	include/linux/clk/samsung.h
 F:	include/linux/platform_data/clk-s3c2410.h
 
 SAMSUNG SPI DRIVERS
-M:	Krzysztof Kozlowski <krzk@kernel.org>
+M:	Krzysztof Kozlowski <krzysztof.kozlowski@linaro.org>
 M:	Andi Shyti <andi@etezian.org>
 L:	linux-spi@vger.kernel.org
 L:	linux-samsung-soc@vger.kernel.org
@@ -17462,7 +17483,7 @@ F:	drivers/net/ethernet/samsung/sxgbe/
 
 SAMSUNG THERMAL DRIVER
 M:	Bartlomiej Zolnierkiewicz <bzolnier@gmail.com>
-M:	Krzysztof Kozlowski <krzk@kernel.org>
+M:	Krzysztof Kozlowski <krzysztof.kozlowski@linaro.org>
 L:	linux-pm@vger.kernel.org
 L:	linux-samsung-soc@vger.kernel.org
 S:	Maintained
@@ -17977,8 +17998,8 @@ F:	drivers/platform/x86/touchscreen_dmi.c
 SILICON LABS WIRELESS DRIVERS (for WFxxx series)
 M:	Jérôme Pouiller <jerome.pouiller@silabs.com>
 S:	Supported
-F:	Documentation/devicetree/bindings/staging/net/wireless/silabs,wfx.yaml
-F:	drivers/staging/wfx/
+F:	Documentation/devicetree/bindings/net/wireless/silabs,wfx.yaml
+F:	drivers/net/wireless/silabs/wfx/
 
 SILICON MOTION SM712 FRAME BUFFER DRIVER
 M:	Sudip Mukherjee <sudipm.mukherjee@gmail.com>
@@ -18623,7 +18644,7 @@ S:	Maintained
 F:	arch/alpha/kernel/srm_env.c
 
 ST LSM6DSx IMU IIO DRIVER
-M:	Lorenzo Bianconi <lorenzo.bianconi83@gmail.com>
+M:	Lorenzo Bianconi <lorenzo@kernel.org>
 L:	linux-iio@vger.kernel.org
 S:	Maintained
 W:	http://www.st.com/
@@ -19828,6 +19849,7 @@ F:	drivers/media/usb/tm6000/
 TMIO/SDHI MMC DRIVER
 M:	Wolfram Sang <wsa+renesas@sang-engineering.com>
 L:	linux-mmc@vger.kernel.org
+L:	linux-renesas-soc@vger.kernel.org
 S:	Supported
 F:	drivers/mmc/host/renesas_sdhi*
 F:	drivers/mmc/host/tmio_mmc*
@@ -21226,10 +21248,8 @@ S:	Maintained
 F:	drivers/hid/hid-wiimote*
 
 WILOCITY WIL6210 WIRELESS DRIVER
-M:	Maya Erez <merez@codeaurora.org>
 L:	linux-wireless@vger.kernel.org
-L:	wil6210@qti.qualcomm.com
-S:	Supported
+S:	Orphan
 W:	https://wireless.wiki.kernel.org/en/users/Drivers/wil6210
 F:	drivers/net/wireless/ath/wil6210/
 

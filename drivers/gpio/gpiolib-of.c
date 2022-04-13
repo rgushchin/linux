@@ -712,9 +712,8 @@ static void of_gpiochip_remove_hog(struct gpio_chip *chip,
 				   struct device_node *hog)
 {
 	struct gpio_desc *desc;
-	unsigned int i;
 
-	for_each_gpio_desc_with_flag(i, chip, desc, FLAG_IS_HOGGED)
+	for_each_gpio_desc_with_flag(chip, desc, FLAG_IS_HOGGED)
 		if (desc->hog == hog)
 			gpiochip_free_own_desc(desc);
 }
@@ -910,7 +909,7 @@ static void of_gpiochip_init_valid_mask(struct gpio_chip *chip)
 					   i, &start);
 		of_property_read_u32_index(np, "gpio-reserved-ranges",
 					   i + 1, &count);
-		if (start >= chip->ngpio || start + count >= chip->ngpio)
+		if (start >= chip->ngpio || start + count > chip->ngpio)
 			continue;
 
 		bitmap_clear(chip->valid_mask, start, count);
