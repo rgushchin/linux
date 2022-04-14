@@ -1,0 +1,14 @@
+mm: memcg kselftests fixes
+
+I'm resending two memcg kselftests fixes, which I first posted in 2019 [1],
+however they didn't go anywhere. I've rechecked them and they're are both
+still actual, even though there were new regressions introduced since that,
+so not all tests are passing now. I know that David Vernet (cc'ed) is working
+on fixing (some of) them, so hopefully he'll post more fixes soon.
+
+I believe it's better for such patches to go through mm and cgroup trees
+(and mailing lists), where there are better chances for them to be properly
+reviewed, so adding corresponding entries to the MAINTAINERS file to make it
+obvious.
+
+1: https://lore.kernel.org/lkml/20191203165758.GA607734@chrisdown.name/T/
