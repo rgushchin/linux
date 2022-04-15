@@ -738,14 +738,17 @@ int shrinker_init_kobj(struct shrinker *shrinker)
 	skobj->id = id;
 	skobj->kobj.kset = shrinker_kset;
 	skobj->shrinker = shrinker;
-	ret = kobject_init_and_add(&skobj->kobj, &shrinker_ktype, NULL, "%d",
-				   id);
+	ret = kobject_init_and_add(&skobj->kobj, &shrinker_ktype, NULL, "%s-%d",
+				   shrinker->name, id);
 	if (ret) {
 		ida_free(&shrinker_sysfs_ida, id);
 		kobject_put(&skobj->kobj);
 		return ret;
 	}
 
+	/* shrinker->name is not needed anymore, free it */
+	kfree(shrinker->name);
+	shrinker->name = NULL;
 	shrinker->kobj = skobj;
 
 	kobject_uevent(&skobj->kobj, KOBJ_ADD);
