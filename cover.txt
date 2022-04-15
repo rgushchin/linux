@@ -1,0 +1,46 @@
+mm: introduce shrinker debugfs interface
+
+There are 50+ different shrinkers in the kernel, many with their own bells and
+whistles. Under the memory pressure the kernel applies some pressure on each of
+them in the order of which they were created/registered in the system. Some
+of them can contain only few objects, some can be quite large. Some can be
+effective at reclaiming memory, some not.
+
+The only existing debugging mechanism is a couple of tracepoints in
+do_shrink_slab(): mm_shrink_slab_start and mm_shrink_slab_end. They aren't
+covering everything though: shrinkers which report 0 objects will never show up,
+there is no support for memcg-aware shrinkers. Shrinkers are identified by their
+scan function, which is not always enough (e.g. hard to guess which super
+block's shrinker it is having only "super_cache_scan").
+
+To provide a better visibility and debug options for memory shrinkers
+this patchset introduces a /sys/kernel/debug/shrinker interface, to some extent
+similar to /sys/kernel/slab.
+
+For each shrinker registered in the system a directory is created.
+As now, the directory will contain only a "scan" file, which allows to get
+the number of managed objects for each memory cgroup (for memcg-aware shrinkers)
+and each numa node (for numa-aware shrinkers on a numa machine). Other
+interfaces might be added in the future.
+
+To make debugging more pleasant, the patchset also names all shrinkers,
+so that debugfs entries can have meaningful names.
+
+
+v3:
+  1) separated the "scan" part into a separate patch, by Dave
+  2) merged *_memcg, *_node and *_memcg_node interfaces, by Dave
+  3) shrinkers naming enhancements, by Christophe and Dave
+  4) added signal_pending() check, by Hillf
+  5) enabled by default, by Dave
+
+v2:
+  1) switched to debugfs, suggested by Mike, Andrew, Greg and others
+  2) switched to seq_file API for output, no PAGE_SIZE limit anymore, by Andrew
+  3) switched to down_read_killable(), suggested by Hillf
+  4) dropped stateful filtering and "freed" returning, by Kent
+  5) added docs, by Andrew
+  6) added memcg_shrinker.py tool
+
+rfc:
+  https://lwn.net/Articles/891542/
