@@ -222,6 +222,185 @@ static const struct file_operations shrinker_debugfs_scan_memcg_fops = {
 };
 #endif
 
+#ifdef CONFIG_NUMA
+static int shrinker_debugfs_count_node_show(struct seq_file *m, void *v)
+{
+	struct shrinker *shrinker = (struct shrinker *)m->private;
+	unsigned long nr;
+	int ret, nid;
+
+	ret = down_read_killable(&shrinker_rwsem);
+	if (ret)
+		return ret;
+
+	for_each_node(nid) {
+		struct shrink_control sc = {
+			.gfp_mask = GFP_KERNEL,
+			.nid = nid,
+		};
+
+		nr = shrinker->count_objects(shrinker, &sc);
+		if (nr == SHRINK_EMPTY)
+			nr = 0;
+
+		seq_printf(m, "%s%lu", nid ? " " : "", nr);
+		cond_resched();
+	}
+	up_read(&shrinker_rwsem);
+	seq_puts(m, "\n");
+	return 0;
+}
+DEFINE_SHOW_ATTRIBUTE(shrinker_debugfs_count_node);
+
+static ssize_t shrinker_debugfs_scan_node_write(struct file *file,
+						const char __user *buf,
+						size_t size, loff_t *pos)
+{
+	struct shrinker *shrinker = (struct shrinker *)file->private_data;
+	unsigned long nr_to_scan = 0;
+	int nid;
+	struct shrink_control sc = {
+		.gfp_mask = GFP_KERNEL,
+	};
+	char kbuf[48];
+	int read_len = size < (sizeof(kbuf) - 1) ? size : (sizeof(kbuf) - 1);
+	ssize_t ret;
+
+	if (copy_from_user(kbuf, buf, read_len))
+		return -EFAULT;
+	kbuf[read_len] = '\0';
+
+	if (sscanf(kbuf, "%d %lu", &nid, &nr_to_scan) < 2)
+		return -EINVAL;
+
+	if (nid < 0 || nid >= nr_node_ids)
+		return -EINVAL;
+
+	ret = down_read_killable(&shrinker_rwsem);
+	if (ret)
+		return ret;
+
+	sc.nid = nid;
+	sc.nr_to_scan = nr_to_scan;
+	sc.nr_scanned = nr_to_scan;
+
+	shrinker->scan_objects(shrinker, &sc);
+
+	up_read(&shrinker_rwsem);
+
+	return ret ? ret : size;
+}
+
+static const struct file_operations shrinker_debugfs_scan_node_fops = {
+	.owner	 = THIS_MODULE,
+	.open	 = shrinker_debugfs_scan_open,
+	.write	 = shrinker_debugfs_scan_node_write,
+};
+
+#ifdef CONFIG_MEMCG
+static int shrinker_debugfs_count_memcg_node_show(struct seq_file *m, void *v)
+{
+	struct shrinker *shrinker = (struct shrinker *)m->private;
+	unsigned long *count_per_node = NULL;
+	struct mem_cgroup *memcg;
+	unsigned long total;
+	int ret, nid;
+
+	count_per_node = kcalloc(nr_node_ids, sizeof(unsigned long), GFP_KERNEL);
+	if (!count_per_node)
+		return -ENOMEM;
+
+	ret = down_read_killable(&shrinker_rwsem);
+	if (ret) {
+		kfree(count_per_node);
+		return ret;
+	}
+	rcu_read_lock();
+
+	memcg = mem_cgroup_iter(NULL, NULL, NULL);
+	do {
+		if (!mem_cgroup_online(memcg))
+			continue;
+
+		total = shrinker_count_objects(shrinker, memcg, count_per_node);
+		if (!total)
+			continue;
+
+		seq_printf(m, "%lu", mem_cgroup_ino(memcg));
+		for_each_node(nid)
+			seq_printf(m, " %lu", count_per_node[nid]);
+		seq_puts(m, "\n");
+	} while ((memcg = mem_cgroup_iter(NULL, memcg, NULL)) != NULL);
+
+	rcu_read_unlock();
+	up_read(&shrinker_rwsem);
+
+	kfree(count_per_node);
+	return ret;
+}
+DEFINE_SHOW_ATTRIBUTE(shrinker_debugfs_count_memcg_node);
+
+static ssize_t shrinker_debugfs_scan_memcg_node_write(struct file *file,
+						      const char __user *buf,
+						      size_t size, loff_t *pos)
+{
+	struct shrinker *shrinker = (struct shrinker *)file->private_data;
+	unsigned long nr_to_scan = 0, ino;
+	struct shrink_control sc = {
+		.gfp_mask = GFP_KERNEL,
+	};
+	struct mem_cgroup *memcg;
+	int nid;
+	char kbuf[72];
+	int read_len = size < (sizeof(kbuf) - 1) ? size : (sizeof(kbuf) - 1);
+	ssize_t ret;
+
+	if (copy_from_user(kbuf, buf, read_len))
+		return -EFAULT;
+	kbuf[read_len] = '\0';
+
+	if (sscanf(kbuf, "%lu %d %lu", &ino, &nid, &nr_to_scan) < 2)
+		return -EINVAL;
+
+	if (nid < 0 || nid >= nr_node_ids)
+		return -EINVAL;
+
+	memcg = mem_cgroup_get_from_ino(ino);
+	if (!memcg || IS_ERR(memcg))
+		return -ENOENT;
+
+	if (!mem_cgroup_online(memcg)) {
+		mem_cgroup_put(memcg);
+		return -ENOENT;
+	}
+
+	ret = down_read_killable(&shrinker_rwsem);
+	if (ret) {
+		mem_cgroup_put(memcg);
+		return ret;
+	}
+
+	sc.nid = nid;
+	sc.memcg = memcg;
+	sc.nr_to_scan = nr_to_scan;
+	sc.nr_scanned = nr_to_scan;
+
+	shrinker->scan_objects(shrinker, &sc);
+
+	up_read(&shrinker_rwsem);
+	mem_cgroup_put(memcg);
+
+	return ret ? ret : size;
+}
+
+static const struct file_operations shrinker_debugfs_scan_memcg_node_fops = {
+	.owner	 = THIS_MODULE,
+	.open	 = shrinker_debugfs_scan_open,
+	.write	 = shrinker_debugfs_scan_memcg_node_write,
+};
+#endif /* CONFIG_MEMCG */
+#endif /* CONFIG_NUMA */
+
 int shrinker_debugfs_add(struct shrinker *shrinker)
 {
 	struct dentry *entry;
@@ -264,6 +443,27 @@ int shrinker_debugfs_add(struct shrinker *shrinker)
 				    &shrinker_debugfs_scan_memcg_fops);
 	}
 #endif
+
+#ifdef CONFIG_NUMA
+	/* create numa and memcg/numa interfaces */
+	if ((shrinker->flags & SHRINKER_NUMA_AWARE) && nr_node_ids > 1) {
+		debugfs_create_file("count_node", 0220, entry, shrinker,
+				    &shrinker_debugfs_count_node_fops);
+		debugfs_create_file("scan_node", 0440, entry, shrinker,
+				    &shrinker_debugfs_scan_node_fops);
+
+#ifdef CONFIG_MEMCG
+		if (shrinker->flags & SHRINKER_MEMCG_AWARE) {
+			debugfs_create_file("count_memcg_node", 0220, entry,
+					    shrinker,
+					    &shrinker_debugfs_count_memcg_node_fops);
+			debugfs_create_file("scan_memcg_node", 0440, entry,
+					    shrinker,
+					    &shrinker_debugfs_scan_memcg_node_fops);
+		}
+#endif /* CONFIG_MEMCG */
+	}
+#endif /* CONFIG_NUMA */
 
 	return 0;
 }
