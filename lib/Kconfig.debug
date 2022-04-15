@@ -733,6 +733,15 @@ config SLUB_STATS
 	  out which slabs are relevant to a particular load.
 	  Try running: slabinfo -DA
 
+config SHRINKER_DEBUG
+	default n
+	bool "Enable shrinker debugging support"
+	depends on SYSFS
+	help
+	  Say Y to enable the /sys/kernel/shrinkers debug interface which
+	  provides visibility into the kernel memory shrinkers subsystem.
+	  Disable it to avoid an extra memory footprint.
+
 config HAVE_DEBUG_KMEMLEAK
 	bool
 

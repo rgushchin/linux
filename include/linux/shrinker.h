@@ -2,6 +2,8 @@
 #ifndef _LINUX_SHRINKER_H
 #define _LINUX_SHRINKER_H
 
+struct shrinker_kobj;
+
 /*
  * This struct is used to pass information from page reclaim to the shrinkers.
  * We consolidate the values for easier extension later.
@@ -73,6 +75,9 @@ struct shrinker {
 	/* ID in shrinker_idr */
 	int id;
 #endif
+#ifdef CONFIG_SHRINKER_DEBUG
+	struct shrinker_kobj *kobj;
+#endif
 	/* objs pending delete, per node */
 	atomic_long_t *nr_deferred;
 };
@@ -94,4 +99,17 @@ extern int register_shrinker(struct shrinker *shrinker);
 extern void unregister_shrinker(struct shrinker *shrinker);
 extern void free_prealloced_shrinker(struct shrinker *shrinker);
 extern void synchronize_shrinkers(void);
-#endif
+
+#ifdef CONFIG_SHRINKER_DEBUG
+int shrinker_init_kobj(struct shrinker *shrinker);
+void shrinker_unlink_kobj(struct shrinker *shrinker);
+#else /* CONFIG_SHRINKER_DEBUG */
+static inline int shrinker_init_kobj(struct shrinker *shrinker)
+{
+	return 0;
+}
+static inline void shrinker_unlink_kobj(struct shrinker *shrinker)
+{
+}
+#endif /* CONFIG_SHRINKER_DEBUG */
+#endif /* _LINUX_SHRINKER_H */
