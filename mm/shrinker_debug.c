@@ -3,6 +3,7 @@
 #include <linux/slab.h>
 #include <linux/kobject.h>
 #include <linux/shrinker.h>
+#include <linux/memcontrol.h>
 
 /* defined in vmscan.c */
 extern struct rw_semaphore shrinker_rwsem;
@@ -207,8 +208,223 @@ static const struct attribute_group shrinker_default_group = {
 	.attrs = shrinker_default_attrs,
 };
 
+#ifdef CONFIG_MEMCG
+static ssize_t count_memcg_show(struct shrinker_kobj *skobj,
+				struct shrinker_attribute *attr, char *buf)
+{
+	unsigned long nr, total;
+	struct shrinker *shrinker;
+	struct mem_cgroup *memcg;
+	ssize_t ret = 0;
+	int nid;
+
+	down_read(&shrinker_rwsem);
+	rcu_read_lock();
+
+	shrinker = skobj->shrinker;
+	if (!shrinker) {
+		ret = -EBUSY;
+		goto out;
+	}
+
+	memcg = mem_cgroup_iter(NULL, NULL, NULL);
+	do {
+		if (!mem_cgroup_online(memcg))
+			continue;
+
+		/*
+		 * Display a PAGE_SIZE of data, reserve last 50 characters
+		 * for "...".
+		 */
+		if (ret > PAGE_SIZE - 50) {
+			ret += sprintf(buf + ret, "...\n");
+			mem_cgroup_iter_break(NULL, memcg);
+			break;
+		}
+
+		total = 0;
+		for_each_node(nid) {
+			struct shrink_control sc = {
+				.gfp_mask = GFP_KERNEL,
+				.nid = nid,
+				.memcg = memcg,
+			};
+
+			nr = shrinker->count_objects(shrinker, &sc);
+			if (nr == SHRINK_EMPTY)
+				nr = 0;
+			total += nr;
+
+			if (!(shrinker->flags & SHRINKER_NUMA_AWARE))
+				break;
+
+			cond_resched();
+		}
+
+		if (!total || total < attr->private)
+			continue;
+
+		ret += sprintf(buf + ret, "%lu %lu\n", mem_cgroup_ino(memcg),
+			       total);
+
+		cond_resched();
+	} while ((memcg = mem_cgroup_iter(NULL, memcg, NULL)) != NULL);
+out:
+	rcu_read_unlock();
+	up_read(&shrinker_rwsem);
+	return ret;
+}
+
+static ssize_t count_memcg_store(struct shrinker_kobj *skobj,
+				 struct shrinker_attribute *attr,
+				 const char *buf, size_t size)
+{
+	unsigned long min_count;
+
+	if (kstrtoul(buf, 10, &min_count))
+		return -EINVAL;
+
+	attr->private = min_count;
+
+	return size;
+}
+
+static struct shrinker_attribute count_memcg_attribute = __ATTR_RW(count_memcg);
+
+static ssize_t scan_memcg_show(struct shrinker_kobj *skobj,
+			       struct shrinker_attribute *attr, char *buf)
+{
+	/*
+	 * Display the number of objects freed on the last scan.
+	 */
+	return sprintf(buf, "%lu\n", attr->private);
+}
+
+static ssize_t scan_memcg_store(struct shrinker_kobj *skobj,
+			  struct shrinker_attribute *attr,
+			  const char *buf, size_t size)
+{
+	unsigned long nr, nr_to_scan = 0, freed = 0, total = 0, ino;
+	unsigned long *count_per_node = NULL;
+	struct mem_cgroup *memcg;
+	struct shrinker *shrinker;
+	ssize_t ret = size;
+	int nid;
+
+	if (sscanf(buf, "%lu %lu", &ino, &nr_to_scan) < 2)
+		return -EINVAL;
+
+	memcg = mem_cgroup_get_from_ino(ino);
+	if (!memcg || IS_ERR(memcg))
+		return -ENOENT;
+
+	if (!mem_cgroup_online(memcg)) {
+		mem_cgroup_put(memcg);
+		return -ENOENT;
+	}
+
+	down_read(&shrinker_rwsem);
+
+	shrinker = skobj->shrinker;
+	if (!shrinker) {
+		ret = -EBUSY;
+		goto out;
+	}
+
+	if (shrinker->flags & SHRINKER_NUMA_AWARE) {
+		count_per_node = kzalloc(sizeof(unsigned long) * nr_node_ids,
+					GFP_KERNEL);
+		if (!count_per_node) {
+			ret = -ENOMEM;
+			goto out;
+		}
+
+		for_each_node(nid) {
+			struct shrink_control sc = {
+				.gfp_mask = GFP_KERNEL,
+				.nid = nid,
+				.memcg = memcg,
+			};
+
+			nr = shrinker->count_objects(shrinker, &sc);
+			if (nr == SHRINK_EMPTY)
+				nr = 0;
+			count_per_node[nid] = nr;
+			total += nr;
+
+			cond_resched();
+		}
+	}
+
+	for_each_node(nid) {
+		struct shrink_control sc = {
+			.gfp_mask = GFP_KERNEL,
+			.nid = nid,
+			.memcg = memcg,
+		};
+
+		if (shrinker->flags & SHRINKER_NUMA_AWARE) {
+			sc.nr_to_scan = nr_to_scan * count_per_node[nid] /
+				(total ? total : 1);
+			sc.nr_scanned = sc.nr_to_scan;
+		} else {
+			sc.nr_to_scan = nr_to_scan;
+			sc.nr_scanned = sc.nr_to_scan;
+		}
+
+		nr = shrinker->scan_objects(shrinker, &sc);
+		if (nr == SHRINK_STOP || nr == SHRINK_EMPTY)
+			nr = 0;
+
+		freed += nr;
+
+		if (!(shrinker->flags & SHRINKER_NUMA_AWARE))
+			break;
+
+		cond_resched();
+	}
+	attr->private = freed;
+out:
+	up_read(&shrinker_rwsem);
+	mem_cgroup_put(memcg);
+	kfree(count_per_node);
+	return ret;
+}
+
+static struct shrinker_attribute scan_memcg_attribute = __ATTR_RW(scan_memcg);
+
+static struct attribute *shrinker_memcg_attrs[] = {
+	&count_memcg_attribute.attr,
+	&scan_memcg_attribute.attr,
+	NULL,
+};
+
+static umode_t memcg_attrs_visible(struct kobject *kobj, struct attribute *attr,
+				   int i)
+{
+	struct shrinker_kobj *skobj = to_shrinker_kobj(kobj);
+	struct shrinker *shrinker;
+	int ret = 0;
+
+	lockdep_assert_held(&shrinker_rwsem);
+
+	shrinker = skobj->shrinker;
+	if (shrinker && (shrinker->flags & SHRINKER_MEMCG_AWARE))
+		ret = 0644;
+
+	return ret;
+}
+
+static const struct attribute_group shrinker_memcg_group = {
+	.attrs = shrinker_memcg_attrs,
+	.is_visible = memcg_attrs_visible,
+};
+#endif /* CONFIG_MEMCG */
 static const struct attribute_group *shrinker_sysfs_groups[] = {
 	&shrinker_default_group,
+#ifdef CONFIG_MEMCG
+	&shrinker_memcg_group,
+#endif
 	NULL,
 };
 
