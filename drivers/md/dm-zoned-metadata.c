@@ -2944,7 +2944,7 @@ int dmz_ctr_metadata(struct dmz_dev *dev, int num_dev,
 	zmd->mblk_shrinker.seeks = DEFAULT_SEEKS;
 
 	/* Metadata cache shrinker */
-	ret = register_shrinker(&zmd->mblk_shrinker);
+	ret = register_shrinker(&zmd->mblk_shrinker, "md_meta");
 	if (ret) {
 		dmz_zmd_err(zmd, "Register metadata cache shrinker failed");
 		goto err;

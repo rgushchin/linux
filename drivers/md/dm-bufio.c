@@ -1806,7 +1806,7 @@ struct dm_bufio_client *dm_bufio_client_create(struct block_device *bdev, unsign
 	c->shrinker.scan_objects = dm_bufio_shrink_scan;
 	c->shrinker.seeks = 1;
 	c->shrinker.batch = 0;
-	r = register_shrinker(&c->shrinker);
+	r = register_shrinker(&c->shrinker, "dm_bufio");
 	if (r)
 		goto bad;
 

@@ -418,7 +418,7 @@ int shrinker_debugfs_add(struct shrinker *shrinker)
 		return id;
 	shrinker->debugfs_id = id;
 
-	snprintf(buf, sizeof(buf), "%d", id);
+	snprintf(buf, sizeof(buf), "%s-%d", shrinker->name, id);
 
 	/* create debugfs entry */
 	entry = debugfs_create_dir(buf, shrinker_debugfs_root);
@@ -465,6 +465,10 @@ int shrinker_debugfs_add(struct shrinker *shrinker)
 	}
 #endif /* CONFIG_NUMA */
 
+	/* shrinker->name is not needed anymore, free it */
+	kfree(shrinker->name);
+	shrinker->name = NULL;
+
 	return 0;
 }
 
@@ -477,6 +481,7 @@ void shrinker_debugfs_remove(struct shrinker *shrinker)
 
 	debugfs_remove_recursive(shrinker->debugfs_entry);
 	ida_free(&shrinker_debugfs_ida, shrinker->debugfs_id);
+	WARN_ON_ONCE(shrinker->name);
 }
 
 static int __init shrinker_debugfs_init(void)
