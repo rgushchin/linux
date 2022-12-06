@@ -3004,6 +3004,28 @@ static struct obj_cgroup *__get_obj_cgroup_from_memcg(struct mem_cgroup *memcg)
 	return objcg;
 }
 
+__always_inline struct obj_cgroup *obj_cgroup_from_current(void)
+{
+	struct obj_cgroup *objcg = NULL;
+	struct mem_cgroup *memcg;
+
+	if (memcg_kmem_bypass())
+		return NULL;
+
+	if (unlikely(active_memcg()))
+		memcg = active_memcg();
+	else
+		memcg = mem_cgroup_from_task(current);
+
+	for (; memcg != root_mem_cgroup; memcg = parent_mem_cgroup(memcg)) {
+		objcg = rcu_dereference(memcg->objcg);
+		if (likely(objcg))
+			return objcg;
+	}
+
+	return NULL;
+}
+
 __always_inline struct obj_cgroup *get_obj_cgroup_from_current(void)
 {
 	struct obj_cgroup *objcg = NULL;
@@ -3043,6 +3065,46 @@ struct obj_cgroup *get_obj_cgroup_from_page(struct page *page)
 			objcg = NULL;
 		rcu_read_unlock();
 	}
+	return objcg;
+}
+
+/*
+ * A passed kernel object must be a slab object or a generic kernel page.
+ * Not suitable for objects, allocated using vmalloc().
+ */
+struct obj_cgroup *get_obj_cgroup_from_slab_obj(void *p)
+{
+	struct obj_cgroup *objcg = NULL;
+	struct folio *folio;
+
+	if (mem_cgroup_disabled())
+		return NULL;
+
+	folio = virt_to_folio(p);
+	/*
+	 * Slab object can be either a true slab object, which are accounted
+	 * individually with objcg pointers stored in a separate objcg array,
+	 * or it can a generic folio with MEMCG_DATA_KMEM flag set.
+	 */
+	if (folio_test_slab(folio)) {
+		struct obj_cgroup **objcgs;
+		struct slab *slab;
+		unsigned int off;
+
+		slab = folio_slab(folio);
+		objcgs = slab_objcgs(slab);
+		if (!objcgs)
+			return NULL;
+
+		off = obj_to_index(slab->slab_cache, slab, p);
+		objcg = objcgs[off];
+	} else {
+		objcg = __folio_objcg(folio);
+	}
+
+	if (objcg)
+		obj_cgroup_get(objcg);
+
 	return objcg;
 }
 
