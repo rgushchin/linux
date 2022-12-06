@@ -196,8 +196,12 @@ static inline void ipc_update_pid(struct pid **pos, struct pid *pid)
 int ipc_parse_version(int *cmd);
 #endif
 
-extern void free_msg(struct msg_msg *msg);
-extern struct msg_msg *load_msg(const void __user *src, size_t len);
+struct msg_cache;
+extern int init_msg_cache(struct msg_cache *cache);
+extern void free_msg_cache(struct msg_cache *cache);
+extern void free_msg(struct msg_msg *msg, struct msg_cache *cache);
+extern struct msg_msg *load_msg(const void __user *src, size_t len,
+				struct msg_cache *cache);
 extern struct msg_msg *copy_msg(struct msg_msg *src, struct msg_msg *dst);
 extern int store_msg(void __user *dest, struct msg_msg *msg, size_t len);
 

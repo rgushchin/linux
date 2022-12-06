@@ -39,15 +39,64 @@ struct msg_msgseg {
 	/* the next part of the message follows immediately */
 };
 
+struct pcpu_msg_cache {
+	struct msg_msg *msg;
+	struct task_struct *curr;
+	size_t len;
+};
+
+struct msg_cache {
+	struct pcpu_msg_cache __percpu *pcpu_cache;
+};
+
 #define DATALEN_MSG	((size_t)PAGE_SIZE-sizeof(struct msg_msg))
 #define DATALEN_SEG	((size_t)PAGE_SIZE-sizeof(struct msg_msgseg))
 
+int init_msg_cache(struct msg_cache *cache)
+{
+	cache->pcpu_cache = alloc_percpu(struct pcpu_msg_cache);
+	if (!cache->pcpu_cache)
+		return -ENOMEM;
 
-static struct msg_msg *alloc_msg(size_t len)
+	return 0;
+}
+
+void free_msg_cache(struct msg_cache *cache)
+{
+	int cpu;
+
+	if (!cache->pcpu_cache)
+		return;
+
+	for_each_possible_cpu(cpu) {
+		struct pcpu_msg_cache *pc = per_cpu_ptr(cache->pcpu_cache, cpu);
+
+		if (pc->msg)
+			free_msg(pc->msg, NULL);
+	}
+
+	free_percpu(cache->pcpu_cache);
+}
+
+static struct msg_msg *alloc_msg(size_t len, struct msg_cache *cache)
 {
 	struct msg_msg *msg;
 	struct msg_msgseg **pseg;
 	size_t alen;
+
+	if (cache) {
+		struct pcpu_msg_cache *pc;
+
+		msg = NULL;
+		pc = get_cpu_ptr(cache->pcpu_cache);
+		if (pc->msg && pc->curr == current && pc->len == len) {
+			msg = pc->msg;
+			pc->msg = NULL;
+		}
+		put_cpu_ptr(cache->pcpu_cache);
+		if (msg)
+			return msg;
+	}
 
 	alen = min(len, DATALEN_MSG);
 	msg = kmalloc(sizeof(*msg) + alen, GFP_KERNEL_ACCOUNT);
@@ -77,18 +126,19 @@ static struct msg_msg *alloc_msg(size_t len)
 	return msg;
 
 out_err:
-	free_msg(msg);
+	free_msg(msg, cache);
 	return NULL;
 }
 
-struct msg_msg *load_msg(const void __user *src, size_t len)
+struct msg_msg *load_msg(const void __user *src, size_t len,
+			 struct msg_cache *cache)
 {
 	struct msg_msg *msg;
 	struct msg_msgseg *seg;
 	int err = -EFAULT;
 	size_t alen;
 
-	msg = alloc_msg(len);
+	msg = alloc_msg(len, cache);
 	if (msg == NULL)
 		return ERR_PTR(-ENOMEM);
 
@@ -104,14 +154,16 @@ struct msg_msg *load_msg(const void __user *src, size_t len)
 			goto out_err;
 	}
 
-	err = security_msg_msg_alloc(msg);
-	if (err)
-		goto out_err;
+	if (!msg->security) {
+		err = security_msg_msg_alloc(msg);
+		if (err)
+			goto out_err;
+	}
 
 	return msg;
 
 out_err:
-	free_msg(msg);
+	free_msg(msg, cache);
 	return ERR_PTR(err);
 }
 #ifdef CONFIG_CHECKPOINT_RESTORE
@@ -166,9 +218,26 @@ int store_msg(void __user *dest, struct msg_msg *msg, size_t len)
 	return 0;
 }
 
-void free_msg(struct msg_msg *msg)
+void free_msg(struct msg_msg *msg, struct msg_cache *cache)
 {
 	struct msg_msgseg *seg;
+
+	if (cache) {
+		struct pcpu_msg_cache *pc;
+		bool cached = false;
+
+		pc = get_cpu_ptr(cache->pcpu_cache);
+		if (!pc->msg) {
+			pc->curr = get_current();
+			pc->len = msg->m_ts;
+			pc->msg = msg;
+			cached = true;
+		}
+		put_cpu_ptr(cache->pcpu_cache);
+
+		if (cached)
+			return;
+	}
 
 	security_msg_msg_free(msg);
 
