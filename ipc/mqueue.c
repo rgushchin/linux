@@ -152,6 +152,8 @@ struct mqueue_inode_info {
 	/* for tasks waiting for free space and messages, respectively */
 	struct ext_wait_queue e_wait_q[2];
 
+	struct msg_cache msg_cache;
+
 	unsigned long qsize; /* size of queue in memory (sum of all msgs) */
 };
 
@@ -323,6 +325,7 @@ static struct inode *mqueue_get_inode(struct super_block *sb,
 		info->msg_tree = RB_ROOT;
 		info->msg_tree_rightmost = NULL;
 		info->node_cache = NULL;
+		info->msg_cache.pcpu_cache = NULL;
 		memset(&info->attr, 0, sizeof(info->attr));
 		info->attr.mq_maxmsg = min(ipc_ns->mq_msg_max,
 					   ipc_ns->mq_msg_default);
@@ -367,6 +370,9 @@ static struct inode *mqueue_get_inode(struct super_block *sb,
 			sizeof(struct posix_msg_tree_node);
 		mq_bytes = info->attr.mq_maxmsg * info->attr.mq_msgsize;
 		if (mq_bytes + mq_treesize < mq_bytes)
+			goto out_inode;
+		ret = init_msg_cache(&info->msg_cache);
+		if (ret)
 			goto out_inode;
 		mq_bytes += mq_treesize;
 		info->ucounts = get_ucounts(current_ucounts());
@@ -531,8 +537,10 @@ static void mqueue_evict_inode(struct inode *inode)
 
 	list_for_each_entry_safe(msg, nmsg, &tmp_msg, m_list) {
 		list_del(&msg->m_list);
-		free_msg(msg);
+		free_msg(msg, NULL);
 	}
+
+	free_msg_cache(&info->msg_cache);
 
 	if (info->ucounts) {
 		unsigned long mq_bytes, mq_treesize;
@@ -1108,7 +1116,7 @@ static int do_mq_timedsend(mqd_t mqdes, const char __user *u_msg_ptr,
 
 	/* First try to allocate memory, before doing anything with
 	 * existing queues. */
-	msg_ptr = load_msg(u_msg_ptr, msg_len);
+	msg_ptr = load_msg(u_msg_ptr, msg_len, &info->msg_cache);
 	if (IS_ERR(msg_ptr)) {
 		ret = PTR_ERR(msg_ptr);
 		goto out_fput;
@@ -1170,7 +1178,7 @@ out_unlock:
 	wake_up_q(&wake_q);
 out_free:
 	if (ret)
-		free_msg(msg_ptr);
+		free_msg(msg_ptr, &info->msg_cache);
 out_fput:
 	fdput(f);
 out:
@@ -1273,7 +1281,7 @@ static int do_mq_timedreceive(mqd_t mqdes, char __user *u_msg_ptr,
 			store_msg(u_msg_ptr, msg_ptr, msg_ptr->m_ts)) {
 			ret = -EFAULT;
 		}
-		free_msg(msg_ptr);
+		free_msg(msg_ptr, &info->msg_cache);
 	}
 out_fput:
 	fdput(f);

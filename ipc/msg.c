@@ -287,7 +287,7 @@ static void freeque(struct ipc_namespace *ns, struct kern_ipc_perm *ipcp)
 
 	list_for_each_entry_safe(msg, t, &msq->q_messages, m_list) {
 		percpu_counter_sub_local(&ns->percpu_msg_hdrs, 1);
-		free_msg(msg);
+		free_msg(msg, NULL);
 	}
 	percpu_counter_sub_local(&ns->percpu_msg_bytes, msq->q_cbytes);
 	ipc_update_pid(&msq->q_lspid, NULL);
@@ -861,7 +861,7 @@ static long do_msgsnd(int msqid, long mtype, void __user *mtext,
 	if (mtype < 1)
 		return -EINVAL;
 
-	msg = load_msg(mtext, msgsz);
+	msg = load_msg(mtext, msgsz, NULL);
 	if (IS_ERR(msg))
 		return PTR_ERR(msg);
 
@@ -954,7 +954,7 @@ out_unlock0:
 out_unlock1:
 	rcu_read_unlock();
 	if (msg != NULL)
-		free_msg(msg);
+		free_msg(msg, NULL);
 	return err;
 }
 
@@ -1049,7 +1049,7 @@ static inline struct msg_msg *prepare_copy(void __user *buf, size_t bufsz)
 	/*
 	 * Create dummy message to copy real message to.
 	 */
-	copy = load_msg(buf, bufsz);
+	copy = load_msg(buf, bufsz, NULL);
 	if (!IS_ERR(copy))
 		copy->m_ts = bufsz;
 	return copy;
@@ -1058,7 +1058,7 @@ static inline struct msg_msg *prepare_copy(void __user *buf, size_t bufsz)
 static inline void free_copy(struct msg_msg *copy)
 {
 	if (copy)
-		free_msg(copy);
+		free_msg(copy, NULL);
 }
 #else
 static inline struct msg_msg *prepare_copy(void __user *buf, size_t bufsz)
@@ -1256,7 +1256,7 @@ out_unlock1:
 	}
 
 	bufsz = msg_handler(buf, msg, bufsz);
-	free_msg(msg);
+	free_msg(msg, NULL);
 
 	return bufsz;
 }
