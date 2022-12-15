@@ -1423,6 +1423,10 @@ struct task_struct {
 	unsigned int			kcov_softirq;
 #endif
 
+#ifdef CONFIG_MEMCG_KMEM
+	struct obj_cgroup		*objcg;
+#endif
+
 #ifdef CONFIG_MEMCG
 	struct mem_cgroup		*memcg_in_oom;
 	gfp_t				memcg_oom_gfp_mask;

@@ -3010,17 +3010,20 @@ __always_inline struct obj_cgroup *get_obj_cgroup_from_current(void)
 		/* Memcg to charge can't be determined. */
 		if (likely(!memcg) && (!current->mm || (current->flags & PF_KTHREAD)))
 			return NULL;
+
+		objcg = current->objcg;
+		if (objcg)
+			obj_cgroup_get(objcg);
 	} else {
 		memcg = this_cpu_read(int_active_memcg);
 		if (likely(!memcg))
 			return NULL;
+
+		rcu_read_lock();
+		objcg = __get_obj_cgroup_from_memcg(memcg);
+		rcu_read_unlock();
 	}
 
-	rcu_read_lock();
-	if (!memcg)
-		memcg = mem_cgroup_from_task(current);
-	objcg = __get_obj_cgroup_from_memcg(memcg);
-	rcu_read_unlock();
 	return objcg;
 }
 
