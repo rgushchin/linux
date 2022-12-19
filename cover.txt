@@ -1,0 +1,17 @@
+mm: kmem: optimize obj_cgroup pointer retrieval
+
+This patchset improves the performance of get_obj_cgroup_from_current(), which
+is used to get an objcg pointer on the kernel memory allocation fast path.
+
+Results (1M 8-bytes accounted allocations):
+
+| version         | accounted (us) | delta | unaccounted (us) |  delta |
+|-----------------+----------------+-------+------------------+--------|
+| baseline (6.1+) |          81042 |       |            45269 |        |
+| patch 1         |          78756 | -2.8% |            42731 |  -5.6% |
+| patch 2         |          73650 | -9.1% |            30662 | -32.3% |
+
+Unaccounted allocations were performed from a user's task belonging to
+the root cgroup, so savings are particularly large because previously
+the root_mem_cgroup pointer was obtained first just to learn that it's
+corresponding objcg is NULL.
