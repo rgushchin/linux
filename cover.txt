@@ -1,0 +1,66 @@
+mm: improve performance of accounted kernel memory allocations
+
+This patchset improves the performance of accounted kernel memory allocations
+by ~30% as measured by a micro-benchmark [1]. The benchmark is very
+straightforward: 1M of 64 bytes-large kmalloc() allocations.
+
+Below are results with the disabled kernel memory accounting, the original state
+and with this patchset applied.
+
+|             | Kmem disabled | Original | Patched |  Delta |
+|-------------+---------------+----------+---------+--------|
+| User cgroup |         29764 |    84548 |   59078 | -30.0% |
+| Root cgroup |         29742 |    48342 |   31501 | -34.8% |
+
+As we can see, the patchset removes the majority of the overhead when there is
+no actual accounting (a task belongs to the root memory cgroup) and almost
+halves the accounting overhead otherwise.
+
+The main idea is to get rid of unnecessary memcg to objcg conversions and switch
+to a scope-based protection of objcgs, which eliminates extra operations with
+objcg reference counters under a rcu read lock. More details are provided in
+individual commit descriptions.
+
+v1:
+	- made the objcg update fully lockless
+	- fixed !CONFIG_MMU build issues
+rfc:
+	https://lwn.net/Articles/945722/
+
+--
+[1]:
+
+static int memory_alloc_test(struct seq_file *m, void *v)
+{
+       unsigned long i, j;
+       void **ptrs;
+       ktime_t start, end;
+       s64 delta, min_delta = LLONG_MAX;
+
+       ptrs = kvmalloc(sizeof(void *) * 1000000, GFP_KERNEL);
+       if (!ptrs)
+               return -ENOMEM;
+
+       for (j = 0; j < 100; j++) {
+               start = ktime_get();
+               for (i = 0; i < 1000000; i++)
+                       ptrs[i] = kmalloc(64, GFP_KERNEL_ACCOUNT);
+               end = ktime_get();
+
+               delta = ktime_us_delta(end, start);
+               if (delta < min_delta)
+                       min_delta = delta;
+
+               for (i = 0; i < 1000000; i++)
+                       kfree(ptrs[i]);
+       }
+
+       kvfree(ptrs);
+       seq_printf(m, "%lld us\n", min_delta);
+
+       return 0;
+}
+
+--
+
+Signed-off-by: Roman Gushchin (Cruise) <roman.gushchin@linux.dev>
