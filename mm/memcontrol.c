@@ -6605,6 +6605,37 @@ static int memory_stat_show(struct seq_file *m, void *v)
 	return 0;
 }
 
+static int memory_alloc_test(struct seq_file *m, void *v)
+{
+	unsigned long i, j;
+	void **ptrs;
+	ktime_t start, end;
+	s64 delta, min_delta = LLONG_MAX;
+
+	ptrs = kvmalloc(sizeof(void *) * 1000000, GFP_KERNEL);
+	if (!ptrs)
+		return -ENOMEM;
+
+	for (j = 0; j < 100; j++) {
+		start = ktime_get();
+		for (i = 0; i < 1000000; i++)
+			ptrs[i] = kmalloc(64, GFP_KERNEL_ACCOUNT);
+		end = ktime_get();
+
+		delta = ktime_us_delta(end, start);
+		if (delta < min_delta)
+			min_delta = delta;
+
+		for (i = 0; i < 1000000; i++)
+			kfree(ptrs[i]);
+	}
+
+	kvfree(ptrs);
+	seq_printf(m, "%lld us\n", min_delta);
+
+	return 0;
+}
+
 #ifdef CONFIG_NUMA
 static inline unsigned long lruvec_page_state_output(struct lruvec *lruvec,
 						     int item)
@@ -6765,6 +6796,10 @@ static struct cftype memory_files[] = {
 	{
 		.name = "stat",
 		.seq_show = memory_stat_show,
+	},
+	{
+		.name = "test",
+		.seq_show = memory_alloc_test,
 	},
 #ifdef CONFIG_NUMA
 	{
