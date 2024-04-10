@@ -6979,6 +6979,46 @@ static int memory_numa_stat_show(struct seq_file *m, void *v)
 }
 #endif
 
+static int memory_alloc_test(struct seq_file *m, void *v)
+{
+       unsigned long i, j;
+       void **ptrs;
+       ktime_t start, end;
+       ktime_t start2, end2;
+       s64 delta, min_delta = LLONG_MAX;
+       s64 delta2, min_delta2 = LLONG_MAX;
+
+       ptrs = kvmalloc(sizeof(struct page *) * 1000000, GFP_KERNEL);
+       if (!ptrs)
+               return -ENOMEM;
+
+       for (j = 0; j < 100; j++) {
+               start = ktime_get();
+               for (i = 0; i < 100000; i++)
+                       ptrs[i] = alloc_pages(__GFP_ACCOUNT, 0);
+               end = ktime_get();
+
+               delta = ktime_us_delta(end, start);
+               if (delta < min_delta)
+                       min_delta = delta;
+
+	       start2 = ktime_get();
+               for (i = 0; i < 100000; i++)
+                       __free_pages(ptrs[i], 0);
+               end2 = ktime_get();
+
+               delta2 = ktime_us_delta(end2, start2);
+               if (delta2 < min_delta2)
+                       min_delta2 = delta2;
+       }
+
+       kvfree(ptrs);
+       seq_printf(m, "alloc: %lld us\n", min_delta);
+       seq_printf(m, "free:  %lld us\n", min_delta2);
+
+       return 0;
+}
+
 static int memory_oom_group_show(struct seq_file *m, void *v)
 {
 	struct mem_cgroup *memcg = mem_cgroup_from_seq(m);
@@ -7120,6 +7160,10 @@ static struct cftype memory_files[] = {
 		.name = "reclaim",
 		.flags = CFTYPE_NS_DELEGATABLE,
 		.write = memory_reclaim,
+	},
+	{
+		.name = "test",
+		.seq_show = memory_alloc_test,
 	},
 	{ }	/* terminate */
 };
