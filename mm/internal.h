@@ -1521,4 +1521,9 @@ static inline void shrinker_debugfs_remove(struct dentry *debugfs_entry,
 void workingset_update_node(struct xa_node *node);
 extern struct list_lru shadow_nodes;
 
+/* Memory cgroups v1-specific definitions */
+void mem_cgroup_update_tree(struct mem_cgroup *memcg, int nid);
+void mem_cgroup_remove_from_trees(struct mem_cgroup *memcg);
+void mem_cgroup_soft_limit_reset(struct mem_cgroup *memcg);
+
 #endif	/* __MM_INTERNAL_H */
