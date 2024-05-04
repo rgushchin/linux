@@ -1521,9 +1521,40 @@ static inline void shrinker_debugfs_remove(struct dentry *debugfs_entry,
 void workingset_update_node(struct xa_node *node);
 extern struct list_lru shadow_nodes;
 
+/* Memcontrol definitions used by memory cgroups v1-specific code */
+int try_charge_memcg(struct mem_cgroup *memcg, gfp_t gfp_mask,
+		     unsigned int nr_pages);
+
+static inline int try_charge(struct mem_cgroup *memcg, gfp_t gfp_mask,
+			     unsigned int nr_pages)
+{
+	if (mem_cgroup_is_root(memcg))
+		return 0;
+
+	return try_charge_memcg(memcg, gfp_mask, nr_pages);
+}
+
+void mem_cgroup_charge_statistics(struct mem_cgroup *memcg, int nr_pages);
+void memcg_check_events(struct mem_cgroup *memcg, int nid);
+void memcg_oom_recover(struct mem_cgroup *memcg);
+void mem_cgroup_id_get_many(struct mem_cgroup *memcg, unsigned int n);
+void mem_cgroup_id_put_many(struct mem_cgroup *memcg, unsigned int n);
+
 /* Memory cgroups v1-specific definitions */
 void mem_cgroup_update_tree(struct mem_cgroup *memcg, int nid);
 void mem_cgroup_remove_from_trees(struct mem_cgroup *memcg);
 void mem_cgroup_soft_limit_reset(struct mem_cgroup *memcg);
+
+struct cftype;
+u64 mem_cgroup_move_charge_read(struct cgroup_subsys_state *css,
+				struct cftype *cft);
+int mem_cgroup_move_charge_write(struct cgroup_subsys_state *css,
+				 struct cftype *cft, u64 val);
+
+struct cgroup_taskset;
+int mem_cgroup_can_attach(struct cgroup_taskset *tset);
+void mem_cgroup_cancel_attach(struct cgroup_taskset *tset);
+bool mem_cgroup_wait_acct_move(struct mem_cgroup *memcg);
+void mem_cgroup_move_task(void);
 
 #endif	/* __MM_INTERNAL_H */
