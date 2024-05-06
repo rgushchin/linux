@@ -1521,6 +1521,29 @@ static inline void shrinker_debugfs_remove(struct dentry *debugfs_entry,
 void workingset_update_node(struct xa_node *node);
 extern struct list_lru shadow_nodes;
 
+#ifdef CONFIG_CGROUPS
+/* Whether legacy memory+swap accounting is active */
+static inline bool do_memsw_account(void)
+{
+	return !cgroup_subsys_on_dfl(memory_cgrp_subsys);
+}
+#endif
+
+/*
+ * Iteration constructs for visiting all cgroups (under a tree).  If
+ * loops are exited prematurely (break), mem_cgroup_iter_break() must
+ * be used for reference counting.
+ */
+#define for_each_mem_cgroup_tree(iter, root)		\
+	for (iter = mem_cgroup_iter(root, NULL, NULL);	\
+	     iter != NULL;				\
+	     iter = mem_cgroup_iter(root, iter, NULL))
+
+#define for_each_mem_cgroup(iter)			\
+	for (iter = mem_cgroup_iter(NULL, NULL, NULL);	\
+	     iter != NULL;				\
+	     iter = mem_cgroup_iter(NULL, iter, NULL))
+
 /* Memcontrol definitions used by memory cgroups v1-specific code */
 int try_charge_memcg(struct mem_cgroup *memcg, gfp_t gfp_mask,
 		     unsigned int nr_pages);
@@ -1535,10 +1558,26 @@ static inline int try_charge(struct mem_cgroup *memcg, gfp_t gfp_mask,
 }
 
 void mem_cgroup_charge_statistics(struct mem_cgroup *memcg, int nr_pages);
-void memcg_check_events(struct mem_cgroup *memcg, int nid);
 void memcg_oom_recover(struct mem_cgroup *memcg);
 void mem_cgroup_id_get_many(struct mem_cgroup *memcg, unsigned int n);
 void mem_cgroup_id_put_many(struct mem_cgroup *memcg, unsigned int n);
+
+unsigned long mem_cgroup_usage(struct mem_cgroup *memcg, bool swap);
+
+/*
+ * Per memcg event counter is incremented at every pagein/pageout. With THP,
+ * it will be incremented by the number of pages. This counter is used
+ * to trigger some periodic events. This is straightforward and better
+ * than using jiffies etc. to handle periodic memcg event.
+ */
+enum mem_cgroup_events_target {
+	MEM_CGROUP_TARGET_THRESH,
+	MEM_CGROUP_TARGET_SOFTLIMIT,
+	MEM_CGROUP_NTARGETS,
+};
+
+bool mem_cgroup_event_ratelimit(struct mem_cgroup *memcg,
+				enum mem_cgroup_events_target target);
 
 /* Memory cgroups v1-specific definitions */
 void mem_cgroup_update_tree(struct mem_cgroup *memcg, int nid);
@@ -1556,5 +1595,19 @@ int mem_cgroup_can_attach(struct cgroup_taskset *tset);
 void mem_cgroup_cancel_attach(struct cgroup_taskset *tset);
 bool mem_cgroup_wait_acct_move(struct mem_cgroup *memcg);
 void mem_cgroup_move_task(void);
+
+/* for encoding cft->private value on file */
+enum res_type {
+	_MEM,
+	_MEMSWAP,
+	_KMEM,
+	_TCP,
+};
+
+void memcg_check_events(struct mem_cgroup *memcg, int nid);
+void mem_cgroup_oom_notify(struct mem_cgroup *memcg);
+ssize_t memcg_write_event_control(struct kernfs_open_file *of, char *buf,
+				  size_t nbytes, loff_t off);
+void mem_cgroup_v1_offline_memcg(struct mem_cgroup *memcg);
 
 #endif	/* __MM_INTERNAL_H */
