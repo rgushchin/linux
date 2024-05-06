@@ -13,6 +13,7 @@
 #include <linux/rmap.h>
 #include <linux/swap.h>
 #include <linux/swapops.h>
+#include <linux/cgroup-defs.h>
 #include <linux/tracepoint-defs.h>
 
 struct folio_batch;
@@ -1579,6 +1580,14 @@ enum mem_cgroup_events_target {
 bool mem_cgroup_event_ratelimit(struct mem_cgroup *memcg,
 				enum mem_cgroup_events_target target);
 
+int memory_stat_show(struct seq_file *m, void *v);
+unsigned long memcg_page_state_local(struct mem_cgroup *memcg, int idx);
+unsigned long memcg_page_state_output(struct mem_cgroup *memcg, int item);
+unsigned long memcg_page_state_local_output(struct mem_cgroup *memcg, int item);
+unsigned long memcg_events(struct mem_cgroup *memcg, int event);
+unsigned long memcg_events_local(struct mem_cgroup *memcg, int event);
+void drain_all_stock(struct mem_cgroup *root_memcg);
+
 /* Memory cgroups v1-specific definitions */
 void mem_cgroup_update_tree(struct mem_cgroup *memcg, int nid);
 void mem_cgroup_remove_from_trees(struct mem_cgroup *memcg);
@@ -1606,8 +1615,10 @@ enum res_type {
 
 void memcg_check_events(struct mem_cgroup *memcg, int nid);
 void mem_cgroup_oom_notify(struct mem_cgroup *memcg);
-ssize_t memcg_write_event_control(struct kernfs_open_file *of, char *buf,
-				  size_t nbytes, loff_t off);
+void memcg1_stat_format(struct mem_cgroup *memcg, struct seq_buf *s);
 void mem_cgroup_v1_offline_memcg(struct mem_cgroup *memcg);
+
+extern struct cftype memsw_files[];
+extern struct cftype mem_cgroup_legacy_files[];
 
 #endif	/* __MM_INTERNAL_H */
