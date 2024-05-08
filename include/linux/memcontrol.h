@@ -182,9 +182,11 @@ struct mem_cgroup {
 		struct page_counter memsw;	/* v1 only */
 	};
 
+#ifdef CONFIG_MEMCG_V1
 	/* Legacy consumer-oriented counters */
 	struct page_counter kmem;		/* v1 only */
 	struct page_counter tcpmem;		/* v1 only */
+#endif
 
 	/* Range enforcement for interrupt charges */
 	struct work_struct high_work;
@@ -198,24 +200,15 @@ struct mem_cgroup {
 	 */
 	bool zswap_writeback;
 #endif
-
-	unsigned long soft_limit;
-
-	/* vmpressure notifications */
-	struct vmpressure vmpressure;
+	int swappiness;
 
 	/*
 	 * Should the OOM killer kill all belonging tasks, had it kill one?
 	 */
 	bool oom_group;
 
-	/* protected by memcg_oom_lock */
-	bool		oom_lock;
-	int		under_oom;
-
-	int	swappiness;
-	/* OOM-Killer disable */
-	int		oom_kill_disable;
+	/* vmpressure notifications */
+	struct vmpressure vmpressure;
 
 	/* memory.events and memory.events.local */
 	struct cgroup_file events_file;
@@ -223,6 +216,16 @@ struct mem_cgroup {
 
 	/* handle for "memory.swap.events" */
 	struct cgroup_file swap_events_file;
+
+#ifdef CONFIG_MEMCG_V1
+	unsigned long soft_limit;
+
+	/* protected by memcg_oom_lock */
+	bool		oom_lock;
+	int		under_oom;
+
+	/* OOM-Killer disable */
+	int		oom_kill_disable;
 
 	/* protect arrays of thresholds */
 	struct mutex thresholds_lock;
@@ -244,6 +247,7 @@ struct mem_cgroup {
 	/* taken only while moving_account > 0 */
 	spinlock_t		move_lock;
 	unsigned long		move_lock_flags;
+#endif
 
 	CACHELINE_PADDING(_pad1_);
 
@@ -279,12 +283,13 @@ struct mem_cgroup {
 #endif
 
 	CACHELINE_PADDING(_pad2_);
-
+#ifdef CONFIG_MEMCG_V1
 	/*
 	 * set > 0 if pages under this cgroup are moving to other cgroup.
 	 */
 	atomic_t		moving_account;
 	struct task_struct	*move_lock_task;
+#endif
 
 	struct memcg_vmstats_percpu __percpu *vmstats_percpu;
 
@@ -294,9 +299,11 @@ struct mem_cgroup {
 	struct memcg_cgwb_frn cgwb_frn[MEMCG_CGWB_FRN_CNT];
 #endif
 
+#ifdef CONFIG_MEMCG_V1
 	/* List of events which userspace want to receive */
 	struct list_head event_list;
 	spinlock_t event_list_lock;
+#endif
 
 #ifdef CONFIG_TRANSPARENT_HUGEPAGE
 	struct deferred_split deferred_split_queue;
