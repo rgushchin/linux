@@ -954,7 +954,14 @@ static inline bool task_in_memcg_oom(struct task_struct *p)
 	return p->memcg_in_oom;
 }
 
+#ifdef CONFIG_MEMCG_V1
 bool mem_cgroup_oom_synchronize(bool wait);
+#else
+static inline bool mem_cgroup_oom_synchronize(bool wait)
+{
+	return false;
+}
+#endif
 struct mem_cgroup *mem_cgroup_get_oom_group(struct task_struct *victim,
 					    struct mem_cgroup *oom_domain);
 void mem_cgroup_print_oom_group(struct mem_cgroup *memcg);
@@ -1872,7 +1879,7 @@ static inline bool mem_cgroup_zswap_writeback_enabled(struct mem_cgroup *memcg)
 
 /* Cgroup v1-specific definitions */
 
-#ifdef CONFIG_MEMCG
+#ifdef CONFIG_MEMCG_V1
 unsigned long mem_cgroup_soft_limit_reclaim(pg_data_t *pgdat, int order,
 						gfp_t gfp_mask,
 						unsigned long *total_scanned);
@@ -1895,7 +1902,7 @@ static inline void mem_cgroup_unlock_pages(void)
 {
 	rcu_read_unlock();
 }
-#else /* CONFIG_MEMCG */
+#else /* CONFIG_MEMCG_V1 */
 
 static inline
 unsigned long mem_cgroup_soft_limit_reclaim(pg_data_t *pgdat, int order,
@@ -1924,6 +1931,6 @@ static inline void mem_cgroup_unlock_pages(void)
 {
 	rcu_read_unlock();
 }
-#endif /* CONFIG_MEMCG */
+#endif /* CONFIG_MEMCG_V1 */
 
 #endif /* _LINUX_MEMCONTROL_H */

@@ -1559,7 +1559,6 @@ static inline int try_charge(struct mem_cgroup *memcg, gfp_t gfp_mask,
 }
 
 void mem_cgroup_charge_statistics(struct mem_cgroup *memcg, int nr_pages);
-void memcg_oom_recover(struct mem_cgroup *memcg);
 void mem_cgroup_id_get_many(struct mem_cgroup *memcg, unsigned int n);
 void mem_cgroup_id_put_many(struct mem_cgroup *memcg, unsigned int n);
 
@@ -1589,6 +1588,7 @@ unsigned long memcg_events_local(struct mem_cgroup *memcg, int event);
 void drain_all_stock(struct mem_cgroup *root_memcg);
 
 /* Memory cgroups v1-specific definitions */
+#ifdef CONFIG_MEMCG_V1
 void mem_cgroup_update_tree(struct mem_cgroup *memcg, int nid);
 void mem_cgroup_remove_from_trees(struct mem_cgroup *memcg);
 void mem_cgroup_soft_limit_reset(struct mem_cgroup *memcg);
@@ -1618,9 +1618,31 @@ void memcg1_stat_format(struct mem_cgroup *memcg, struct seq_buf *s);
 bool mem_cgroup_v1_oom_prepare(struct mem_cgroup *memcg, gfp_t mask, int order,
 			       bool *locked);
 void mem_cgroup_v1_oom_finish(struct mem_cgroup *memcg, bool *locked);
+void memcg_oom_recover(struct mem_cgroup *memcg);
 void mem_cgroup_v1_offline_memcg(struct mem_cgroup *memcg);
 
 extern struct cftype memsw_files[];
 extern struct cftype mem_cgroup_legacy_files[];
+
+#else /* CONFIG_MEMCG_V1 */
+static inline void mem_cgroup_remove_from_trees(struct mem_cgroup *memcg) {}
+static inline void mem_cgroup_soft_limit_reset(struct mem_cgroup *memcg) {}
+
+static inline bool mem_cgroup_wait_acct_move(struct mem_cgroup *memcg)
+{
+	return false;
+}
+
+static inline void memcg_check_events(struct mem_cgroup *memcg, int nid) {}
+static inline void memcg1_stat_format(struct mem_cgroup *memcg, struct seq_buf *s) {}
+static inline bool mem_cgroup_v1_oom_prepare(struct mem_cgroup *memcg, gfp_t mask, int order,
+			       bool *locked)
+{
+	return true;
+}
+static inline void mem_cgroup_v1_oom_finish(struct mem_cgroup *memcg, bool *locked) {}
+static inline void memcg_oom_recover(struct mem_cgroup *memcg) {}
+static inline void mem_cgroup_v1_offline_memcg(struct mem_cgroup *memcg) {}
+#endif /* CONFIG_MEMCG_V1 */
 
 #endif	/* __MM_INTERNAL_H */
