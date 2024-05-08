@@ -1614,8 +1614,10 @@ enum res_type {
 };
 
 void memcg_check_events(struct mem_cgroup *memcg, int nid);
-void mem_cgroup_oom_notify(struct mem_cgroup *memcg);
 void memcg1_stat_format(struct mem_cgroup *memcg, struct seq_buf *s);
+bool mem_cgroup_v1_oom_prepare(struct mem_cgroup *memcg, gfp_t mask, int order,
+			       bool *locked);
+void mem_cgroup_v1_oom_finish(struct mem_cgroup *memcg, bool *locked);
 void mem_cgroup_v1_offline_memcg(struct mem_cgroup *memcg);
 
 extern struct cftype memsw_files[];
