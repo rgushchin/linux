@@ -944,6 +944,7 @@ void mem_cgroup_print_oom_context(struct mem_cgroup *memcg,
 
 void mem_cgroup_print_oom_meminfo(struct mem_cgroup *memcg);
 
+#ifdef CONFIG_MEMCG_V1
 static inline void mem_cgroup_enter_user_fault(void)
 {
 	WARN_ON(current->in_user_fault);
@@ -961,9 +962,17 @@ static inline bool task_in_memcg_oom(struct task_struct *p)
 	return p->memcg_in_oom;
 }
 
-#ifdef CONFIG_MEMCG_V1
 bool mem_cgroup_oom_synchronize(bool wait);
 #else
+static inline void mem_cgroup_enter_user_fault(void) {}
+
+static inline void mem_cgroup_exit_user_fault(void) {}
+
+static inline bool task_in_memcg_oom(struct task_struct *p)
+{
+	return false;
+}
+
 static inline bool mem_cgroup_oom_synchronize(bool wait)
 {
 	return false;
