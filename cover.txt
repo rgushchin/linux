@@ -1,0 +1,50 @@
+mm: memcg: separate legacy cgroup v1 code and put under config option
+
+Cgroups v2 have been around for a while and many users have fully adopted them,
+so they never use cgroups v1 features and functionality. Yet they have to "pay"
+for the cgroup v1 support anyway:
+1) the kernel binary contains useless cgroup v1 code,
+2) some common structures like task_struct and mem_cgroup have never used
+   cgroup v1-specific members,
+3) some code paths have additional checks which are not needed.
+
+Cgroup v1's memory controller has a number of features that are not supported
+by cgroup v2 and their implementation is pretty much self contained.
+Most notably, these features are: soft limit reclaim, oom handling in userspace,
+complicated event notification system, charge migration.
+
+Cgroup v1-specific code in memcontrol.c is close to 4k lines in size and it's
+intervened with generic and cgroup v2-specific code. It's a burden on
+developers and maintainers.
+
+This patchset aims to solve these problems by:
+1) moving cgroup v1-specific memcg code to the new mm/memcontrol-v1.c file,
+2) putting definitions shared by memcontrol.c and memcontrol-v1.c into the
+   mm/internal.h header
+3) introducing the CONFIG_MEMCG_V1 config option, turned on by default
+4) making memcontrol-v1.c to compile only if CONFIG_MEMCG_V1 is set
+5) putting unused struct memory_cgroup and task_struct members under
+   CONFIG_MEMCG_V1 as well.
+
+This is an RFC version, which is not 100% polished yet, so but it would be great
+to discuss and agree on the overall approach.
+
+Some open questions, opinions are appreciated:
+1) I consider renaming non-static functions in memcontrol-v1.c to have
+   mem_cgroup_v1_ prefix. Is this a good idea?
+2) Do we want to extend it beyond the memory controller? Should
+3) Is it better to use a new include/linux/memcontrol-v1.h instead of
+   mm/internal.h? Or mm/memcontrol-v1.h.
+
+diffstat:
+ include/linux/memcontrol.h |  165 ++++---
+ include/linux/sched.h      |    5 +-
+ init/Kconfig               |    7 +
+ mm/Makefile                |    2 +
+ mm/internal.h              |  124 +++++
+ mm/memcontrol-v1.c         | 2941 ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+ mm/memcontrol.c            | 4121 ++++++++++++++++++++++---------------------------------------------------------------------------------------------------------------------------------
+ 7 files changed, 3765 insertions(+), 3600 deletions(-)
+
+Suggested-by: Matthew Wilcox (Oracle) <willy@infradead.org>
+Signed-off-by: Roman Gushchin <roman.gushchin@linux.dev>
