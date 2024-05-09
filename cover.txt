@@ -1,0 +1,52 @@
+mm: memcg: separate legacy cgroup v1 code and put under config option
+
+Cgroups v2 have been around for a while and many users have fully adopted them,
+so they never use cgroups v1 features and functionality. Yet they have to "pay"
+for the cgroup v1 support anyway:
+1) the kernel binary contains an unused cgroup v1 code,
+2) some code paths have additional checks which are not needed,
+3) some common structures like task_struct and mem_cgroup contain unused
+   cgroup v1-specific members.
+
+Cgroup v1's memory controller has a number of features that are not supported
+by cgroup v2 and their implementation is pretty much self contained.
+Most notably, these features are: soft limit reclaim, oom handling in userspace,
+complicated event notification system, charge migration. Cgroup v1-specific code
+in memcontrol.c is close to 4k lines in size and it's intervened with generic
+and cgroup v2-specific code. It's a burden on developers and maintainers.
+
+This patchset aims to solve these problems by:
+1) moving cgroup v1-specific memcg code to the new mm/memcontrol-v1.c file,
+2) putting definitions shared by memcontrol.c and memcontrol-v1.c into the
+   mm/memcontrol-v1.h header,
+3) introducing the CONFIG_MEMCG_V1 config option, turned off by default,
+4) making memcontrol-v1.c to compile only if CONFIG_MEMCG_V1 is set.
+
+If CONFIG_MEMCG_V1 is not set, cgroup v1 memory controller is still available
+for mounting, however no memory-specific control knobs are present.
+
+rfc:
+  https://lwn.net/Articles/973082/
+
+v1:
+  - switched to CONFIG_MEMCG_V1 being off by default based on LSFMMBPF
+    discussion [1]
+  - switched to memcg1_ prefix (Johannes)
+  - many minor fixes
+  - dropped patches which put struct memcg members under CONFIG_MEMCG_V1
+    (will post as a separate patchset)
+
+[1]: https://lwn.net/Articles/974575/
+
+MAINTAINERS                |    2 +
+include/linux/memcontrol.h |  156 ++++---
+init/Kconfig               |    9 +
+mm/Makefile                |    2 +
+mm/memcontrol-v1.c         | 2933 ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+mm/memcontrol-v1.h         |  132 ++++++
+mm/memcontrol.c            | 4169 +++++++++++++++++++++++++++---------------------------------------------------------------------------------------------------------------------------------------------------
+mm/vmscan.c                |   10 +-
+8 files changed, 3794 insertions(+), 3619 deletions(-)
+
+Suggested-by: Matthew Wilcox (Oracle) <willy@infradead.org>
+Signed-off-by: Roman Gushchin <roman.gushchin@linux.dev>
