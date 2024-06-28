@@ -1,0 +1,9 @@
+mm: memcg: put cgroup v1-specific memcg data under CONFIG_MEMCG_V1
+
+This patchset puts all cgroup v1's members of struct mem_cgroup,
+struct mem_cgroup_per_node and struct task_struct under
+the CONFIG_MEMCG_V1 config option. If cgroup v1 support is not
+required (and it's true for many cgroup users these days), it
+allows to save a bit of memory and compile out some code, some
+of which is on relatively hot paths. It also structures the code
+a bit better by grouping cgroup v1-specific stuff in one place.
