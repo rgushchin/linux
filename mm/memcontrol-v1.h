@@ -76,6 +76,7 @@ int memory_stat_show(struct seq_file *m, void *v);
 
 /* Cgroup v1-specific declarations */
 #ifdef CONFIG_MEMCG_V1
+void memcg1_memcg_init(struct mem_cgroup *memcg);
 void memcg1_remove_from_trees(struct mem_cgroup *memcg);
 
 static inline void memcg1_soft_limit_reset(struct mem_cgroup *memcg)
@@ -124,6 +125,7 @@ extern struct cftype mem_cgroup_legacy_files[];
 
 #else	/* CONFIG_MEMCG_V1 */
 
+static inline void memcg1_memcg_init(struct mem_cgroup *memcg) {}
 static inline void memcg1_remove_from_trees(struct mem_cgroup *memcg) {}
 static inline void memcg1_soft_limit_reset(struct mem_cgroup *memcg) {}
 static inline bool memcg1_wait_acct_move(struct mem_cgroup *memcg) { return false; }
