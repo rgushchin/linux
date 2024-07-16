@@ -1,0 +1,13 @@
+mm: memcg: page counters optimizations
+
+This patchset contains 3 independent small optimizations of page counters.
+
+v3:
+  - dropped the main part based on a feedback from Johannes
+  - rebased on top of current mm-unstable
+v2:
+  - two page_counter structures per hugetlb cgroup instead of one
+  - rebased to the current mm branch
+  - many minor fixes and improvements
+v1:
+  https://lore.kernel.org/lkml/20240503201835.2969707-1-roman.gushchin@linux.dev/T/#m77151ed83451a49132e29ef13d55e08b95ac867f
