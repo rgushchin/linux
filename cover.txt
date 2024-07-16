@@ -1,0 +1,13 @@
+mm: memcg: merge page_counter trees
+
+This patchset reorganizes page_counter structures which helps to make
+memory cgroup and hugetlb cgroup structures smaller (10%-35% depending
+on the kernel configuration) and more cache-effective. It also eliminates
+useless tracking of protected memory usage when it's not needed.
+
+v2:
+  - two page_counter structures per hugetlb cgroup instead of one
+  - rebased to the current mm branch
+  - many minor fixes and improvements
+v1:
+  https://lore.kernel.org/lkml/20240503201835.2969707-1-roman.gushchin@linux.dev/T/#m77151ed83451a49132e29ef13d55e08b95ac867f
