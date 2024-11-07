@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
+#include "linux/kstrtox.h"
 #include <linux/memcontrol.h>
 #include <linux/swap.h>
 #include <linux/mm_inline.h>
@@ -957,12 +958,11 @@ static ssize_t memcg_write_event_control(struct kernfs_open_file *of,
 	struct mem_cgroup *memcg = mem_cgroup_from_css(css);
 	struct mem_cgroup_event *event;
 	struct cgroup_subsys_state *cfile_css;
-	unsigned int efd, cfd;
+	unsigned long efd, cfd;
 	struct fd efile;
 	struct fd cfile;
 	struct dentry *cdentry;
 	const char *name;
-	char *endp;
 	int ret;
 
 	if (IS_ENABLED(CONFIG_PREEMPT_RT))
@@ -970,17 +970,19 @@ static ssize_t memcg_write_event_control(struct kernfs_open_file *of,
 
 	buf = strstrip(buf);
 
-	efd = simple_strtoul(buf, &endp, 10);
-	if (*endp != ' ')
+	ret = kstrtoul(buf, 10, &efd);
+	if (ret < 0)
 		return -EINVAL;
-	buf = endp + 1;
+	if (*buf != ' ')
+		return -EINVAL;
+	buf++;
 
-	cfd = simple_strtoul(buf, &endp, 10);
-	if (*endp == '\0')
-		buf = endp;
-	else if (*endp == ' ')
-		buf = endp + 1;
-	else
+	ret = kstrtoul(buf, 10, &cfd);
+	if (ret < 0)
+		return -EINVAL;
+	else if (*buf == ' ')
+		buf++;
+	else if (*buf != '\0')
 		return -EINVAL;
 
 	event = kzalloc(sizeof(*event), GFP_KERNEL);
