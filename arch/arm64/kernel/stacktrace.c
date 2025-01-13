@@ -154,8 +154,10 @@ unwind_next_frame_sframe(struct unwind_state *state)
 		return err;
 
 	err = sframe_find_pc(ip, &entry);
-	if (err)
-		return -EINVAL;
+	if (err) {
+		state->reliable = false;
+		return unwind_next_frame_record(state);
+	}
 
 	if (!state->cfa) {
 		/* Set up the initial CFA using fp based info if CFA is not set */
@@ -281,6 +283,7 @@ kunwind_stack_walk(kunwind_consume_fn consume_state,
 			.stacks = stacks,
 			.nr_stacks = ARRAY_SIZE(stacks),
 #ifdef CONFIG_SFRAME_UNWINDER
+			.reliable = true,
 			.cfa = 0,
 #endif
 		},
@@ -321,6 +324,42 @@ noinline noinstr void arch_stack_walk(stack_trace_consume_fn consume_entry,
 	};
 
 	kunwind_stack_walk(arch_kunwind_consume_entry, &data, task, regs);
+}
+
+struct kunwind_reliable_consume_entry_data {
+	stack_trace_consume_fn consume_entry;
+	void *cookie;
+	bool reliable;
+};
+
+static __always_inline bool
+arch_kunwind_reliable_consume_entry(const struct kunwind_state *state, void *cookie)
+{
+	struct kunwind_reliable_consume_entry_data *data = cookie;
+
+	if (!state->common.reliable) {
+		data->reliable = false;
+		return false;
+	}
+	return data->consume_entry(data->cookie, state->common.pc);
+}
+
+noinline notrace int arch_stack_walk_reliable(
+				stack_trace_consume_fn consume_entry,
+				void *cookie, struct task_struct *task)
+{
+	struct kunwind_reliable_consume_entry_data data = {
+		.consume_entry = consume_entry,
+		.cookie = cookie,
+		.reliable = true,
+	};
+
+	kunwind_stack_walk(arch_kunwind_reliable_consume_entry, &data, task, NULL);
+
+	if (!data.reliable)
+		return -EINVAL;
+
+	return 0;
 }
 
 struct bpf_unwind_consume_entry_data {
