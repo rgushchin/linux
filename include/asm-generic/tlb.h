@@ -538,7 +538,7 @@ static inline unsigned long tlb_get_unmap_size(struct mmu_gather *tlb)
  */
 static inline void tlb_start_vma(struct mmu_gather *tlb, struct vm_area_struct *vma)
 {
-	if (tlb->fullmm)
+	if (tlb->fullmm || tlb->need_flush_all)
 		return;
 
 	tlb_update_vma_flags(tlb, vma);
@@ -549,7 +549,7 @@ static inline void tlb_start_vma(struct mmu_gather *tlb, struct vm_area_struct *
 
 static inline void tlb_end_vma(struct mmu_gather *tlb, struct vm_area_struct *vma)
 {
-	if (tlb->fullmm)
+	if (tlb->fullmm || tlb->need_flush_all)
 		return;
 
 	/*
