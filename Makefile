@@ -1064,6 +1064,12 @@ ifdef CONFIG_CC_IS_GCC
 KBUILD_CFLAGS   += -fconserve-stack
 endif
 
+# build with sframe table
+ifdef CONFIG_SFRAME_UNWIND_TABLE
+KBUILD_CFLAGS	+= -Wa,--gsframe
+KBUILD_AFLAGS	+= -Wa,--gsframe
+endif
+
 # change __FILE__ to the relative path to the source directory
 ifdef building_out_of_srctree
 KBUILD_CPPFLAGS += $(call cc-option,-fmacro-prefix-map=$(srcroot)/=)
