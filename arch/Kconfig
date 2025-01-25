@@ -520,6 +520,13 @@ config SFRAME_VALIDATION
 
 	  If unsure, say N.
 
+config ARCH_SUPPORTS_SFRAME_UNWINDER
+	bool
+	help
+	  An architecture can select this if it  enables the sframe (Simple
+	  Frame) unwinder for unwinding kernel stack traces. It uses unwind
+	  table that is directly generatedby toolchain based on DWARF CFI information.
+
 config HAVE_PERF_REGS
 	bool
 	help
