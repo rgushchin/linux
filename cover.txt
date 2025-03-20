@@ -1,0 +1,72 @@
+mm: BPF OOM
+
+This patchset adds an ability to customize the out of memory
+handling using bpf.
+
+It focuses on two parts:
+1) OOM handling policy,
+2) PSI-based OOM invocation.
+
+The idea to use bpf for customizing the OOM handling is not new, but
+unlike the previous proposal [1], which augmented the existing task
+ranking-based policy, this one tries to be as generic as possible and
+leverage the full power of the modern bpf.
+
+It provides a generic hook which is called before the existing OOM
+killer code and allows implementing any policy, e.g.  picking a victim
+task or memory cgroup or potentially even releasing memory in other
+ways, e.g. deleting tmpfs files (the last one might require some
+additional but relatively simple changes).
+
+The past attempt to implement memory-cgroup aware policy [2] showed
+that there are multiple opinions on what the best policy is.  As it's
+highly workload-dependent and specific to a concrete way of organizing
+workloads, the structure of the cgroup tree etc, a customizable
+bpf-based implementation is preferable over a in-kernel implementation
+with a dozen on sysctls.
+
+The second part is related to the fundamental question on when to
+declare the OOM event. It's a trade-off between the risk of
+unnecessary OOM kills and associated work losses and the risk of
+infinite trashing and effective soft lockups.  In the last few years
+several PSI-based userspace solutions were developed (e.g. OOMd [3] or
+systemd-OOMd [4]). The common idea was to use userspace daemons to
+implement custom OOM logic as well as rely on PSI monitoring to avoid
+stalls. In this scenario the userspace daemon was supposed to handle
+the majority of OOMs, while the in-kernel OOM killer worked as the
+last resort measure to guarantee that the system would never deadlock
+on the memory. But this approach creates additional infrastructure
+churn: userspace OOM daemon is a separate entity which needs to be
+deployed, updated, monitored. A completely different pipeline needs to
+be built to monitor both types of OOM events and collect associated
+logs. A userspace daemon is more restricted in terms on what data is
+available to it. Implementing a daemon which can work reliably under a
+heavy memory pressure in the system is also tricky.
+
+[1]: https://lwn.net/ml/linux-kernel/20230810081319.65668-1-zhouchuyi@bytedance.com/
+[2]: https://lore.kernel.org/lkml/20171130152824.1591-1-guro@fb.com/
+[3]: https://github.com/facebookincubator/oomd
+[4]: https://www.freedesktop.org/software/systemd/man/latest/systemd-oomd.service.html
+
+----
+
+This is an RFC version, which is not intended to be merged in the current form.
+Open questions/TODOs:
+1) Program type/attachment type for the bpf_handle_out_of_memory() hook.
+   It has to be able to return a value, to be sleepable (to use cgroup iterators)
+   and to have trusted arguments to pass oom_control down to bpf_oom_kill_process().
+   Current patchset has a workaround (patch "bpf: treat fmodret tracing program's
+   arguments as trusted"), which is not safe. One option is to fake acquire/release
+   semantics for the oom_control pointer. Other option is to introduce a completely
+   new attachment or program type, similar to lsm hooks.
+2) Currently lockdep complaints about a potential circular dependency because
+   sleepable bpf_handle_out_of_memory() hook calls might_fault() under oom_lock.
+   One way to fix it is to make it non-sleepable, but then it will require some
+   additional work to allow it using cgroup iterators. It's intervened with 1).
+3) What kind of hierarchical features are required? Do we want to nest oom policies?
+   Do we want to attach oom policies to cgroups? I think it's too complicated,
+   but if we want a full hierarchical support, it might be required.
+   Patch "mm: introduce bpf_get_root_mem_cgroup() bpf kfunc" exposes the true root
+   memcg, which is potentially outside of the ns of the loading process. Does
+   it require some additional capabilities checks? Should it be removed?
+4) Documentation is lacking and will be added in the next version.
