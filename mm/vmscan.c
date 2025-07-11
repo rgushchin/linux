@@ -71,6 +71,13 @@
 #define CREATE_TRACE_POINTS
 #include <trace/events/vmscan.h>
 
+enum scan_balance {
+	SCAN_EQUAL,
+	SCAN_FRACT,
+	SCAN_ANON,
+	SCAN_FILE,
+};
+
 struct scan_control {
 	/* How many pages shrink_list() should reclaim */
 	unsigned long nr_to_reclaim;
@@ -90,6 +97,7 @@ struct scan_control {
 	/*
 	 * Scan pressure balancing between anon and file LRUs
 	 */
+	enum scan_balance scan_balance;
 	unsigned long	anon_cost;
 	unsigned long	file_cost;
 
@@ -1988,6 +1996,17 @@ static int current_may_throttle(void)
 	return !(current->flags & PF_LOCAL_THROTTLE);
 }
 
+static bool scan_balance_biased(struct scan_control *sc)
+{
+	switch (sc->scan_balance) {
+	case SCAN_EQUAL:
+	case SCAN_FRACT:
+		return false;
+	default:
+		return true;
+	}
+}
+
 /*
  * shrink_inactive_list() is a helper for shrink_node().  It returns the number
  * of reclaimed pages
@@ -2054,7 +2073,9 @@ static unsigned long shrink_inactive_list(unsigned long nr_to_scan,
 	__count_vm_events(PGSTEAL_ANON + file, nr_reclaimed);
 	spin_unlock_irq(&lruvec->lru_lock);
 
-	lru_note_cost(lruvec, file, stat.nr_pageout, nr_scanned - nr_reclaimed);
+	if (!scan_balance_biased(sc))
+		lru_note_cost(lruvec, file, stat.nr_pageout,
+			      nr_scanned - nr_reclaimed);
 
 	/*
 	 * If dirty folios are scanned that are not queued for IO, it
@@ -2202,7 +2223,7 @@ static void shrink_active_list(unsigned long nr_to_scan,
 	__mod_node_page_state(pgdat, NR_ISOLATED_ANON + file, -nr_taken);
 	spin_unlock_irq(&lruvec->lru_lock);
 
-	if (nr_rotated)
+	if (nr_rotated && !scan_balance_biased(sc))
 		lru_note_cost(lruvec, file, 0, nr_rotated);
 	trace_mm_vmscan_lru_shrink_active(pgdat->node_id, nr_taken, nr_activate,
 			nr_deactivate, nr_rotated, sc->priority, file);
@@ -2326,13 +2347,6 @@ static bool inactive_is_low(struct lruvec *lruvec, enum lru_list inactive_lru)
 
 	return inactive * inactive_ratio < active;
 }
-
-enum scan_balance {
-	SCAN_EQUAL,
-	SCAN_FRACT,
-	SCAN_ANON,
-	SCAN_FILE,
-};
 
 static void prepare_scan_control(pg_data_t *pgdat, struct scan_control *sc)
 {
@@ -2613,6 +2627,8 @@ static void get_scan_count(struct lruvec *lruvec, struct scan_control *sc,
 	calculate_pressure_balance(sc, swappiness, fraction, &denominator);
 
 out:
+	sc->scan_balance = scan_balance;
+
 	for_each_evictable_lru(lru) {
 		bool file = is_file_lru(lru);
 		unsigned long lruvec_size;
