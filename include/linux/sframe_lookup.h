@@ -31,9 +31,11 @@ struct sframe_table {
 
 #ifdef CONFIG_SFRAME_UNWINDER
 void init_sframe_table(void);
+void sframe_module_init(struct module *mod, void *_sframe, size_t _sframe_size);
 int sframe_find_pc(unsigned long pc, struct sframe_ip_entry *entry);
 #else
 static inline void init_sframe_table(void) {}
+static inline void sframe_module_init(struct module *mod, void *_sframe, size_t _sframe_size) {}
 static inline int sframe_find_pc(unsigned long pc, struct sframe_ip_entry *entry)
 {
 	return -EINVAL;

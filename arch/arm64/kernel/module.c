@@ -18,6 +18,7 @@
 #include <linux/moduleloader.h>
 #include <linux/random.h>
 #include <linux/scs.h>
+#include <linux/sframe_lookup.h>
 
 #include <asm/alternative.h>
 #include <asm/insn.h>
@@ -490,6 +491,10 @@ int module_finalize(const Elf_Ehdr *hdr,
 				       me->name, ret);
 		}
 	}
+
+	s = find_section(hdr, sechdrs, ".sframe");
+	if (s)
+		sframe_module_init(me, (void *)s->sh_addr, s->sh_size);
 
 	return module_init_ftrace_plt(hdr, sechdrs, me);
 }

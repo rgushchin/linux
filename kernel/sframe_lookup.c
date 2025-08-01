@@ -156,10 +156,19 @@ int sframe_find_pc(unsigned long pc, struct sframe_ip_entry *entry)
 	struct sframe_table *sftbl_p = &sftbl;
 	int err;
 
-	if (!sframe_init)
+	if (!entry || !sframe_init)
 		return -EINVAL;
 
 	memset(entry, 0, sizeof(*entry));
+
+	if (!is_ksym_addr(pc)) {
+		struct module *mod;
+		mod = __module_address(pc);
+		if (!mod || !mod->arch.sframe_init)
+			return -EINVAL;
+		sftbl_p = &mod->arch.sftbl;
+	}
+
 	entry->ra_offset = sftbl_p->sfhdr_p->cfa_fixed_ra_offset;
 	entry->fp_offset = sftbl_p->sfhdr_p->cfa_fixed_fp_offset;
 
@@ -193,4 +202,30 @@ void __init init_sframe_table(void)
 	sftbl.fre_p = __start_sframe_header + SFRAME_HEADER_SIZE(*sftbl.sfhdr_p)
 		+ sftbl.sfhdr_p->fres_off;
 	sframe_init = true;
+}
+
+void sframe_module_init(struct module *mod, void *_sframe, size_t _sframe_size)
+{
+	size_t sframe_size = _sframe_size;
+	void *sframe_buf = _sframe;
+	struct sframe_table _sftbl;
+
+
+	if (sframe_size <= 0)
+		return;
+	_sftbl.sfhdr_p = sframe_buf;
+	if (!_sftbl.sfhdr_p || _sftbl.sfhdr_p->preamble.magic != SFRAME_MAGIC ||
+	    _sftbl.sfhdr_p->preamble.version != SFRAME_VERSION_2 ||
+	    !(_sftbl.sfhdr_p->preamble.flags & SFRAME_F_FDE_SORTED)) {
+		pr_warn("WARNING: Unable to read sframe header.  Disabling unwinder.\n");
+		return;
+	}
+
+	_sftbl.fde_p = (struct sframe_fde *)(sframe_buf + SFRAME_HEADER_SIZE(*_sftbl.sfhdr_p)
+						+ _sftbl.sfhdr_p->fdes_off);
+	_sftbl.fre_p = sframe_buf + SFRAME_HEADER_SIZE(*_sftbl.sfhdr_p)
+		+ _sftbl.sfhdr_p->fres_off;
+
+	mod->arch.sftbl = _sftbl;
+	mod->arch.sframe_init = true;
 }
