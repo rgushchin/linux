@@ -14,6 +14,7 @@
 #include <linux/sched/debug.h>
 #include <linux/sched/task_stack.h>
 #include <linux/stacktrace.h>
+#include <linux/sframe_lookup.h>
 
 #include <asm/efi.h>
 #include <asm/irq.h>
@@ -244,6 +245,53 @@ kunwind_next_frame_record(struct kunwind_state *state)
 	return 0;
 }
 
+#ifdef CONFIG_SFRAME_UNWINDER
+/*
+ * Unwind to the next frame according to sframe.
+ */
+static __always_inline int
+unwind_next_frame_sframe(struct unwind_state *state)
+{
+	unsigned long fp = state->fp, ip = state->pc;
+	unsigned long base_reg, cfa;
+	unsigned long pc_addr, fp_addr;
+	struct sframe_ip_entry entry;
+	struct stack_info *info;
+	struct frame_record *record = (struct frame_record *)fp;
+
+	int err;
+
+	/* frame record alignment 8 bytes */
+	if (fp & 0x7)
+		return -EINVAL;
+
+	info = unwind_find_stack(state, fp, sizeof(*record));
+	if (!info)
+		return -EINVAL;
+
+	err = sframe_find_pc(ip, &entry);
+	if (err)
+		return -EINVAL;
+
+	unwind_consume_stack(state, info, fp, sizeof(*record));
+
+	base_reg = entry.use_fp ? fp : state->cfa;
+
+	/* Set up the initial CFA using fp based info if CFA is not set */
+	if (!state->cfa)
+		cfa = fp - entry.fp_offset;
+	else
+		cfa = base_reg + entry.cfa_offset;
+	fp_addr = cfa + entry.fp_offset;
+	pc_addr = cfa + entry.ra_offset;
+	state->cfa = cfa;
+	state->fp = READ_ONCE(*(unsigned long *)(fp_addr));
+	state->pc = READ_ONCE(*(unsigned long *)(pc_addr));
+
+	return 0;
+}
+#endif
+
 /*
  * Unwind from one frame record (A) to the next frame record (B).
  *
@@ -263,7 +311,20 @@ kunwind_next(struct kunwind_state *state)
 	case KUNWIND_SOURCE_CALLER:
 	case KUNWIND_SOURCE_TASK:
 	case KUNWIND_SOURCE_REGS_PC:
+#ifdef CONFIG_SFRAME_UNWINDER
+	if (!state->common.unreliable)
+		err = unwind_next_frame_sframe(&state->common);
+
+	/* Fallback to FP based unwinder */
+	if (err || state->common.unreliable) {
 		err = kunwind_next_frame_record(state);
+		/* Mark its stacktrace result as unreliable if it is unwindable via FP */
+		if (!err)
+			state->common.unreliable = true;
+	}
+#else
+	err = kunwind_next_frame_record(state);
+#endif
 		break;
 	default:
 		err = -EINVAL;
@@ -352,6 +413,9 @@ kunwind_stack_walk(kunwind_consume_fn consume_state,
 		.common = {
 			.stacks = stacks,
 			.nr_stacks = ARRAY_SIZE(stacks),
+#ifdef CONFIG_SFRAME_UNWINDER
+			.cfa = 0,
+#endif
 		},
 	};
 
@@ -392,6 +456,43 @@ noinline noinstr void arch_stack_walk(stack_trace_consume_fn consume_entry,
 	kunwind_stack_walk(arch_kunwind_consume_entry, &data, task, regs);
 }
 
+#ifdef CONFIG_SFRAME_UNWINDER
+struct kunwind_reliable_consume_entry_data {
+	stack_trace_consume_fn consume_entry;
+	void *cookie;
+	bool unreliable;
+};
+
+static __always_inline bool
+arch_kunwind_reliable_consume_entry(const struct kunwind_state *state, void *cookie)
+{
+	struct kunwind_reliable_consume_entry_data *data = cookie;
+
+	if (state->common.unreliable) {
+		data->unreliable = true;
+		return false;
+	}
+	return data->consume_entry(data->cookie, state->common.pc);
+}
+
+noinline notrace int arch_stack_walk_reliable(
+				stack_trace_consume_fn consume_entry,
+				void *cookie, struct task_struct *task)
+{
+	struct kunwind_reliable_consume_entry_data data = {
+		.consume_entry = consume_entry,
+		.cookie = cookie,
+		.unreliable = false,
+	};
+
+	kunwind_stack_walk(arch_kunwind_reliable_consume_entry, &data, task, NULL);
+
+	if (data.unreliable)
+		return -EINVAL;
+
+	return 0;
+}
+#else
 static __always_inline bool
 arch_reliable_kunwind_consume_entry(const struct kunwind_state *state, void *cookie)
 {
@@ -421,6 +522,7 @@ noinline noinstr int arch_stack_walk_reliable(stack_trace_consume_fn consume_ent
 	return kunwind_stack_walk(arch_reliable_kunwind_consume_entry, &data,
 				  task, NULL);
 }
+#endif
 
 struct bpf_unwind_consume_entry_data {
 	bool (*consume_entry)(void *cookie, u64 ip, u64 sp, u64 fp);
