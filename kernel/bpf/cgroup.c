@@ -520,6 +520,7 @@ static void prog_list_init_item(struct bpf_prog_list *pl, struct bpf_prog_array_
 {
 	if (pl->link && pl->link->map) {
 		item->kdata = bpf_struct_ops_map_kdata(pl->link->map);
+		item->cgroup = pl->link->cgroup;
 	} else {
 		item->prog = prog_list_prog(pl);
 		bpf_cgroup_storages_assign(item->cgroup_storage, pl->storage);
@@ -1411,7 +1412,7 @@ static int __cgroup_bpf_query(struct cgroup *cgrp, const union bpf_attr *attr,
 			return -ENOENT;
 		from_atype = to_atype = atype;
 		flags = 0;
-		if (!cgroup_bpf_enabled(atype))
+		if (!static_key_enabled(&cgroup_bpf_enabled_key[atype].key))
 			goto skip_count;
 	} else if (type == BPF_LSM_CGROUP) {
 		if (!effective_query && attr->query.prog_cnt &&
