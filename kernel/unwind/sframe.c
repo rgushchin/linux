@@ -12,6 +12,7 @@
 #include <linux/mm.h>
 #include <linux/string_helpers.h>
 #include <linux/sframe.h>
+#include <asm/unwind_user_sframe.h>
 #include <linux/unwind_user_types.h>
 
 #include "sframe.h"
@@ -31,8 +32,11 @@ struct sframe_fde_internal {
 struct sframe_fre_internal {
 	unsigned int	size;
 	u32		ip_off;
+	u32		cfa_ctl;
 	s32		cfa_off;
+	u32		ra_ctl;
 	s32		ra_off;
+	u32		fp_ctl;
 	s32		fp_off;
 	u8		info;
 };
@@ -189,16 +193,147 @@ Efault:
 		 s32 :	UNSAFE_GET_USER_SIGNED_INC(to, from, size, label),	\
 		 s64 :	UNSAFE_GET_USER_SIGNED_INC(to, from, size, label))
 
+static __always_inline int
+__read_regular_fre_datawords(struct sframe_section *sec,
+			     struct sframe_fde_internal *fde,
+			     unsigned long cur,
+			     unsigned char dataword_count,
+			     unsigned char dataword_size,
+			     struct sframe_fre_internal *fre)
+{
+	s32 cfa_off, ra_off, fp_off;
+	unsigned int cfa_regnum;
+
+	UNSAFE_GET_USER_INC(cfa_off, cur, dataword_size, Efault);
+	dataword_count--;
+
+	ra_off = sec->ra_off;
+	if (!ra_off && dataword_count) {
+		dataword_count--;
+		UNSAFE_GET_USER_INC(ra_off, cur, dataword_size, Efault);
+	}
+
+	fp_off = sec->fp_off;
+	if (!fp_off && dataword_count) {
+		dataword_count--;
+		UNSAFE_GET_USER_INC(fp_off, cur, dataword_size, Efault);
+	}
+
+	if (dataword_count)
+		return -EFAULT;
+
+	cfa_regnum =
+		(SFRAME_V3_FRE_CFA_BASE_REG_ID(fre->info) == SFRAME_BASE_REG_FP) ?
+			SFRAME_REG_FP : SFRAME_REG_SP;
+
+	fre->cfa_ctl	= (cfa_regnum << 3) | 1; /* regnum, deref_p=0, reg_p=1 */
+	fre->cfa_off	= cfa_off;
+	fre->ra_ctl	= ra_off ? 2 : 0; /* regnum=0, deref_p=(ra_off != 0), reg_p=0 */
+	fre->ra_off	= ra_off;
+	fre->fp_ctl	= fp_off ? 2 : 0; /* regnum=0, deref_p=(fp_off != 0), reg_p=0 */
+	fre->fp_off	= fp_off;
+
+	return 0;
+
+Efault:
+	return -EFAULT;
+}
+
+static __always_inline int
+__read_flex_fde_fre_datawords(struct sframe_section *sec,
+			      struct sframe_fde_internal *fde,
+			      unsigned long cur,
+			      unsigned char dataword_count,
+			      unsigned char dataword_size,
+			      struct sframe_fre_internal *fre)
+{
+	u32 cfa_ctl, ra_ctl, fp_ctl;
+	s32 cfa_off, ra_off, fp_off;
+
+	if (dataword_count < 2)
+		return -EFAULT;
+	UNSAFE_GET_USER_INC(cfa_ctl, cur, dataword_size, Efault);
+	UNSAFE_GET_USER_INC(cfa_off, cur, dataword_size, Efault);
+	dataword_count -= 2;
+
+	ra_off = sec->ra_off;
+	ra_ctl = ra_off ? 2 : 0; /* regnum=0, deref_p=(ra_off != 0), reg_p=0 */
+	if (dataword_count >= 2) {
+		UNSAFE_GET_USER_INC(ra_ctl, cur, dataword_size, Efault);
+		dataword_count--;
+		if (ra_ctl) {
+			UNSAFE_GET_USER_INC(ra_off, cur, dataword_size, Efault);
+			dataword_count--;
+		} else {
+			/* Padding RA location info */
+			ra_ctl = ra_off ? 2 : 0; /* re-deduce (see above) */
+		}
+	}
+
+	fp_off = sec->fp_off;
+	fp_ctl = fp_off ? 2 : 0; /* regnum=0, deref_p=(fp_off != 0), reg_p=0 */
+	if (dataword_count >= 2) {
+		UNSAFE_GET_USER_INC(fp_ctl, cur, dataword_size, Efault);
+		dataword_count--;
+		if (fp_ctl) {
+			UNSAFE_GET_USER_INC(fp_off, cur, dataword_size, Efault);
+			dataword_count--;
+		} else {
+			/* Padding FP location info */
+			fp_ctl = fp_off ? 2 : 0; /* re-deduce (see above) */
+		}
+	}
+
+	if (dataword_count)
+		return -EFAULT;
+
+	fre->cfa_ctl	= cfa_ctl;
+	fre->cfa_off	= cfa_off;
+	fre->ra_ctl	= ra_ctl;
+	fre->ra_off	= ra_off;
+	fre->fp_ctl	= fp_ctl;
+	fre->fp_off	= fp_off;
+
+	return 0;
+
+Efault:
+	return -EFAULT;
+}
+
+static __always_inline int
+__read_fre_datawords(struct sframe_section *sec,
+		     struct sframe_fde_internal *fde,
+		     unsigned long cur,
+		     unsigned char dataword_count,
+		     unsigned char dataword_size,
+		     struct sframe_fre_internal *fre)
+{
+	unsigned char fde_type = SFRAME_V3_FDE_TYPE(fde->info2);
+
+	switch (fde_type) {
+	case SFRAME_FDE_TYPE_REGULAR:
+		return __read_regular_fre_datawords(sec, fde, cur,
+						    dataword_count,
+						    dataword_size,
+						    fre);
+	case SFRAME_FDE_TYPE_FLEXIBLE:
+		return __read_flex_fde_fre_datawords(sec, fde, cur,
+						     dataword_count,
+						     dataword_size,
+						     fre);
+	default:
+		return -EFAULT;
+	}
+}
+
 static __always_inline int __read_fre(struct sframe_section *sec,
 				      struct sframe_fde_internal *fde,
 				      unsigned long fre_addr,
 				      struct sframe_fre_internal *fre)
 {
-	unsigned char fde_type = SFRAME_V3_FDE_TYPE(fde->info2);
 	unsigned char fde_pctype = SFRAME_V3_FDE_PCTYPE(fde->info);
 	unsigned char fre_type = SFRAME_V3_FDE_FRE_TYPE(fde->info);
 	unsigned char dataword_count, dataword_size;
-	s32 cfa_off, ra_off, fp_off;
 	unsigned long cur = fre_addr;
 	unsigned char addr_size;
 	u32 ip_off;
@@ -224,75 +359,88 @@ static __always_inline int __read_fre(struct sframe_section *sec,
 	if (cur + (dataword_count * dataword_size) > sec->fres_end)
 		return -EFAULT;
 
-	/* TODO: Support for flexible FDEs not implemented yet. */
-	if (fde_type != SFRAME_FDE_TYPE_REGULAR)
-		return -EFAULT;
+	fre->size	= addr_size + 1 + (dataword_count * dataword_size);
+	fre->ip_off	= ip_off;
+	fre->info	= info;
 
 	if (!dataword_count) {
 		/*
 		 * A FRE without data words indicates RA undefined /
 		 * outermost frame.
 		 */
-		cfa_off	= 0;
-		ra_off	= 0;
-		fp_off	= 0;
-		goto done;
+		fre->cfa_ctl	= 0;
+		fre->cfa_off	= 0;
+		fre->ra_ctl	= 0;
+		fre->ra_off	= 0;
+		fre->fp_ctl	= 0;
+		fre->fp_off	= 0;
+
+		return 0;
 	}
 
-	UNSAFE_GET_USER_INC(cfa_off, cur, dataword_size, Efault);
-	dataword_count--;
-
-	ra_off = sec->ra_off;
-	if (!ra_off && dataword_count) {
-		dataword_count--;
-		UNSAFE_GET_USER_INC(ra_off, cur, dataword_size, Efault);
-	}
-
-	fp_off = sec->fp_off;
-	if (!fp_off && dataword_count) {
-		dataword_count--;
-		UNSAFE_GET_USER_INC(fp_off, cur, dataword_size, Efault);
-	}
-
-	if (dataword_count)
-		return -EFAULT;
-
-done:
-	fre->size	= addr_size + 1 + (dataword_count * dataword_size);
-	fre->ip_off	= ip_off;
-	fre->cfa_off	= cfa_off;
-	fre->ra_off	= ra_off;
-	fre->fp_off	= fp_off;
-	fre->info	= info;
-
-	return 0;
+	return __read_fre_datawords(sec, fde, cur, dataword_count, dataword_size, fre);
 
 Efault:
 	return -EFAULT;
 }
 
-static __always_inline void
+static __always_inline int
 sframe_init_cfa_rule_data(struct unwind_user_cfa_rule_data *cfa_rule_data,
-			  unsigned char fre_info,
-			  s32 offset)
+			  u32 ctlword, s32 offset)
 {
-	if (SFRAME_V3_FRE_CFA_BASE_REG_ID(fre_info) == SFRAME_BASE_REG_FP)
-		cfa_rule_data->rule = UNWIND_USER_CFA_RULE_FP_OFFSET;
-	else
-		cfa_rule_data->rule = UNWIND_USER_CFA_RULE_SP_OFFSET;
+	bool deref_p = SFRAME_V3_FLEX_FDE_CTLWORD_DEREF_P(ctlword);
+	bool reg_p = SFRAME_V3_FLEX_FDE_CTLWORD_REG_P(ctlword);
+
+	if (reg_p) {
+		unsigned int regnum = SFRAME_V3_FLEX_FDE_CTLWORD_REGNUM(ctlword);
+
+		switch (regnum) {
+		case SFRAME_REG_SP:
+			cfa_rule_data->rule = UNWIND_USER_CFA_RULE_SP_OFFSET;
+			break;
+		case SFRAME_REG_FP:
+			cfa_rule_data->rule = UNWIND_USER_CFA_RULE_FP_OFFSET;
+			break;
+		default:
+			cfa_rule_data->rule = UNWIND_USER_CFA_RULE_REG_OFFSET;
+			cfa_rule_data->regnum = regnum;
+		}
+	} else {
+		return -EINVAL;
+	}
+
+	if (deref_p)
+		cfa_rule_data->rule |= UNWIND_USER_RULE_DEREF;
+
 	cfa_rule_data->offset = offset;
+
+	return 0;
 }
 
 static __always_inline void
 sframe_init_rule_data(struct unwind_user_rule_data *rule_data,
-		      s32 offset)
+		      u32 ctlword, s32 offset)
 {
-	if (offset) {
-		rule_data->rule = UNWIND_USER_RULE_CFA_OFFSET_DEREF;
-		rule_data->offset = offset;
-	} else {
+	bool deref_p = SFRAME_V3_FLEX_FDE_CTLWORD_DEREF_P(ctlword);
+	bool reg_p = SFRAME_V3_FLEX_FDE_CTLWORD_REG_P(ctlword);
+
+	if (!ctlword && !offset) {
 		rule_data->rule = UNWIND_USER_RULE_RETAIN;
+		return;
 	}
+	if (reg_p) {
+		unsigned int regnum = SFRAME_V3_FLEX_FDE_CTLWORD_REGNUM(ctlword);
+
+		rule_data->rule = UNWIND_USER_RULE_REG_OFFSET;
+		rule_data->regnum = regnum;
+	} else {
+		rule_data->rule = UNWIND_USER_RULE_CFA_OFFSET;
+	}
+
+	if (deref_p)
+		rule_data->rule |= UNWIND_USER_RULE_DEREF;
+
+	rule_data->offset = offset;
 }
 
 static __always_inline int __find_fre(struct sframe_section *sec,
@@ -344,9 +492,10 @@ static __always_inline int __find_fre(struct sframe_section *sec,
 		return -EINVAL;
 	fre = prev_fre;
 
-	sframe_init_cfa_rule_data(&frame->cfa, fre->info, fre->cfa_off);
-	sframe_init_rule_data(&frame->ra, fre->ra_off);
-	sframe_init_rule_data(&frame->fp, fre->fp_off);
+	if (sframe_init_cfa_rule_data(&frame->cfa, fre->cfa_ctl, fre->cfa_off))
+		return -EINVAL;
+	sframe_init_rule_data(&frame->ra, fre->ra_ctl, fre->ra_off);
+	sframe_init_rule_data(&frame->fp, fre->fp_ctl, fre->fp_off);
 	frame->outermost = SFRAME_V3_FRE_RA_UNDEFINED_P(fre->info);
 
 	return 0;

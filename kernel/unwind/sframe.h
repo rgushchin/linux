@@ -66,6 +66,7 @@ struct sframe_fda_v3 {
 #define SFRAME_V3_AARCH64_FDE_PAUTH_KEY(info)	(((info) >> 5) & 0x1)
 
 #define SFRAME_FDE_TYPE_REGULAR			0
+#define SFRAME_FDE_TYPE_FLEXIBLE		1
 
 #define SFRAME_V3_FDE_TYPE_MASK			0x0f
 #define SFRAME_V3_FDE_TYPE(info2)		((info2) & SFRAME_V3_FDE_TYPE_MASK)
@@ -78,5 +79,9 @@ struct sframe_fda_v3 {
 #define SFRAME_V3_FRE_DATAWORD_SIZE(info)		(((info) >> 5) & 0x3)
 #define SFRAME_V3_AARCH64_FRE_MANGLED_RA_P(info)	(((info) >> 7) & 0x1)
 #define SFRAME_V3_FRE_RA_UNDEFINED_P(info)		(SFRAME_V3_FRE_DATAWORD_COUNT(info) == 0)
+
+#define SFRAME_V3_FLEX_FDE_CTLWORD_REGNUM(data)		(((data) >> 3) & 0x1f)
+#define SFRAME_V3_FLEX_FDE_CTLWORD_DEREF_P(data)	(((data) >> 1) & 0x1)
+#define SFRAME_V3_FLEX_FDE_CTLWORD_REG_P(data)		((data) & 0x1)
 
 #endif /* _SFRAME_H */
