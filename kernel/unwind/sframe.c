@@ -12,8 +12,7 @@
 #include <linux/mm.h>
 #include <linux/string_helpers.h>
 #include <linux/sframe.h>
-#include <asm/unwind_user_sframe.h>
-#include <linux/unwind_user_types.h>
+#include <asm/unwind_sframe.h>
 
 #include "sframe.h"
 #include "sframe_debug.h"
@@ -44,8 +43,6 @@ struct sframe_fre_internal {
 	unsigned char	dw_size;
 };
 
-DEFINE_STATIC_SRCU(sframe_srcu);
-
 static __always_inline unsigned char fre_type_to_size(unsigned char fre_type)
 {
 	if (fre_type > 2)
@@ -60,6 +57,63 @@ static __always_inline unsigned char dataword_size_enum_to_size(unsigned char da
 	return 1 << dataword_size;
 }
 
+#ifdef CONFIG_HAVE_UNWIND_USER_SFRAME
+
+DEFINE_STATIC_SRCU(sframe_srcu);
+
+#define UNSAFE_USER_COPY(to, from, size, label)				\
+	unsafe_copy_from_user(to, (void __user *)from, size, label)
+
+#define UNSAFE_USER_GET(to, from, type, label)				\
+	unsafe_get_user(to, (type __user *)from, label)
+
+#else /* !CONFIG_HAVE_UNWIND_USER_SFRAME */
+
+#define UNSAFE_USER_COPY(to, from, size, label) goto label
+#define UNSAFE_USER_GET(to, from, type, label) goto label
+
+#endif /* !CONFIG_HAVE_UNWIND_USER_SFRAME */
+
+#ifdef CONFIG_SFRAME_UNWINDER
+
+#define KERNEL_COPY(to, from, size, label) memcpy(to, (void *)from, size)
+#define KERNEL_GET(to, from, type, label) (to) = *(type *)(from)
+
+#else /* !CONFIG_SFRAME_UNWINDER */
+
+#define KERNEL_COPY(to, from, size, label) goto label
+#define KERNEL_GET(to, from, type, label) goto label
+
+#endif /* !CONFIG_SFRAME_UNWINDER */
+
+#define DATA_COPY(sec, to, from, size, label)			\
+({								\
+	switch (sec->sec_type) {				\
+	case SFRAME_KERNEL:					\
+		KERNEL_COPY(to, from, size, label);		\
+		break;						\
+	case SFRAME_USER:					\
+		UNSAFE_USER_COPY(to, from, size, label);	\
+		break;						\
+	default:						\
+		goto label;					\
+	}							\
+})
+
+#define DATA_GET(sec, to, from, type, label)			\
+({								\
+	switch (sec->sec_type) {				\
+	case SFRAME_KERNEL:					\
+		KERNEL_GET(to, from, type, label);		\
+		break;						\
+	case SFRAME_USER:					\
+		UNSAFE_USER_GET(to, from, type, label);		\
+		break;						\
+	default:						\
+		goto label;					\
+	}							\
+})
+
 static __always_inline int __read_fde(struct sframe_section *sec,
 				      unsigned int fde_num,
 				      struct sframe_fde_internal *fde)
@@ -69,8 +123,8 @@ static __always_inline int __read_fde(struct sframe_section *sec,
 	struct sframe_fda_v3 _fda;
 
 	fde_addr = sec->fdes_start + (fde_num * sizeof(struct sframe_fde_v3));
-	unsafe_copy_from_user(&_fde, (void __user *)fde_addr,
-			      sizeof(struct sframe_fde_v3), Efault);
+	DATA_COPY(sec, &_fde, fde_addr,
+		  sizeof(struct sframe_fde_v3), Efault);
 
 	func_addr = fde_addr + _fde.func_start_off;
 	if (func_addr < sec->text_start || func_addr > sec->text_end)
@@ -79,8 +133,8 @@ static __always_inline int __read_fde(struct sframe_section *sec,
 	fda_addr = sec->fres_start + _fde.fres_off;
 	if (fda_addr + sizeof(struct sframe_fda_v3) > sec->fres_end)
 		return -EINVAL;
-	unsafe_copy_from_user(&_fda, (void __user *)fda_addr,
-			      sizeof(struct sframe_fda_v3), Efault);
+	DATA_COPY(sec, &_fda, fda_addr,
+		  sizeof(struct sframe_fda_v3), Efault);
 
 	fde->func_addr	= func_addr;
 	fde->func_size	= _fde.func_size;
@@ -102,21 +156,21 @@ static __always_inline int __find_fde(struct sframe_section *sec,
 				      struct sframe_fde_internal *fde)
 {
 	unsigned long func_addr_low = 0, func_addr_high = ULONG_MAX;
-	struct sframe_fde_v3 __user *first, *low, *high, *found = NULL;
+	struct sframe_fde_v3 *first, *low, *high, *found = NULL;
 	int ret;
 
-	first = (void __user *)sec->fdes_start;
+	first = (void *)sec->fdes_start;
 	low = first;
 	high = first + sec->num_fdes - 1;
 
 	while (low <= high) {
-		struct sframe_fde_v3 __user *mid;
+		struct sframe_fde_v3 *mid;
 		s64 func_off;
 		unsigned long func_addr;
 
 		mid = low + ((high - low) / 2);
 
-		unsafe_get_user(func_off, (s64 __user *)mid, Efault);
+		DATA_GET(sec, func_off, mid, s64, Efault);
 		func_addr = (unsigned long)mid + func_off;
 
 		if (ip >= func_addr) {
@@ -154,47 +208,47 @@ Efault:
 	return -EFAULT;
 }
 
-#define ____UNSAFE_GET_USER_INC(to, from, type, label)			\
+#define ____GET_INC(sec, to, from, type, label)				\
 ({									\
 	type __to;							\
-	unsafe_get_user(__to, (type __user *)from, label);		\
+	DATA_GET(sec, __to, from, type, label);				\
 	from += sizeof(__to);						\
 	to = __to;							\
 })
 
-#define __UNSAFE_GET_USER_INC(to, from, size, label, u_or_s)		\
+#define __GET_INC(sec, to, from, size, label, u_or_s)			\
 ({									\
 	switch (size) {							\
 	case 1:								\
-		____UNSAFE_GET_USER_INC(to, from, u_or_s##8, label);	\
+		____GET_INC(sec, to, from, u_or_s##8, label);		\
 		break;							\
 	case 2:								\
-		____UNSAFE_GET_USER_INC(to, from, u_or_s##16, label);	\
+		____GET_INC(sec, to, from, u_or_s##16, label);		\
 		break;							\
 	case 4:								\
-		____UNSAFE_GET_USER_INC(to, from, u_or_s##32, label);	\
+		____GET_INC(sec, to, from, u_or_s##32, label);		\
 		break;							\
 	default:							\
 		return -EFAULT;						\
 	}								\
 })
 
-#define UNSAFE_GET_USER_UNSIGNED_INC(to, from, size, label)		\
-	__UNSAFE_GET_USER_INC(to, from, size, label, u)
+#define GET_UNSIGNED_INC(sec, to, from, size, label)			\
+	__GET_INC(sec, to, from, size, label, u)
 
-#define UNSAFE_GET_USER_SIGNED_INC(to, from, size, label)		\
-	__UNSAFE_GET_USER_INC(to, from, size, label, s)
+#define GET_SIGNED_INC(sec, to, from, size, label)			\
+	__GET_INC(sec, to, from, size, label, s)
 
-#define UNSAFE_GET_USER_INC(to, from, size, label)				\
-	_Generic(to,								\
-		 u8 :	UNSAFE_GET_USER_UNSIGNED_INC(to, from, size, label),	\
-		 u16 :	UNSAFE_GET_USER_UNSIGNED_INC(to, from, size, label),	\
-		 u32 :	UNSAFE_GET_USER_UNSIGNED_INC(to, from, size, label),	\
-		 u64 :	UNSAFE_GET_USER_UNSIGNED_INC(to, from, size, label),	\
-		 s8 :	UNSAFE_GET_USER_SIGNED_INC(to, from, size, label),	\
-		 s16 :	UNSAFE_GET_USER_SIGNED_INC(to, from, size, label),	\
-		 s32 :	UNSAFE_GET_USER_SIGNED_INC(to, from, size, label),	\
-		 s64 :	UNSAFE_GET_USER_SIGNED_INC(to, from, size, label))
+#define GET_INC(sec, to, from, size, label)				\
+	_Generic(to,							\
+		 u8 :	GET_UNSIGNED_INC(sec, to, from, size, label),	\
+		 u16 :	GET_UNSIGNED_INC(sec, to, from, size, label),	\
+		 u32 :	GET_UNSIGNED_INC(sec, to, from, size, label),	\
+		 u64 :	GET_UNSIGNED_INC(sec, to, from, size, label),	\
+		 s8 :	GET_SIGNED_INC(sec, to, from, size, label),	\
+		 s16 :	GET_SIGNED_INC(sec, to, from, size, label),	\
+		 s32 :	GET_SIGNED_INC(sec, to, from, size, label),	\
+		 s64 :	GET_SIGNED_INC(sec, to, from, size, label))
 
 static __always_inline int
 __read_regular_fre_datawords(struct sframe_section *sec,
@@ -207,19 +261,19 @@ __read_regular_fre_datawords(struct sframe_section *sec,
 	s32 cfa_off, ra_off, fp_off;
 	unsigned int cfa_regnum;
 
-	UNSAFE_GET_USER_INC(cfa_off, cur, dataword_size, Efault);
+	GET_INC(sec, cfa_off, cur, dataword_size, Efault);
 	dataword_count--;
 
 	ra_off = sec->ra_off;
 	if (!ra_off && dataword_count) {
 		dataword_count--;
-		UNSAFE_GET_USER_INC(ra_off, cur, dataword_size, Efault);
+		GET_INC(sec, ra_off, cur, dataword_size, Efault);
 	}
 
 	fp_off = sec->fp_off;
 	if (!fp_off && dataword_count) {
 		dataword_count--;
-		UNSAFE_GET_USER_INC(fp_off, cur, dataword_size, Efault);
+		GET_INC(sec, fp_off, cur, dataword_size, Efault);
 	}
 
 	if (dataword_count)
@@ -255,17 +309,17 @@ __read_flex_fde_fre_datawords(struct sframe_section *sec,
 
 	if (dataword_count < 2)
 		return -EFAULT;
-	UNSAFE_GET_USER_INC(cfa_ctl, cur, dataword_size, Efault);
-	UNSAFE_GET_USER_INC(cfa_off, cur, dataword_size, Efault);
+	GET_INC(sec, cfa_ctl, cur, dataword_size, Efault);
+	GET_INC(sec, cfa_off, cur, dataword_size, Efault);
 	dataword_count -= 2;
 
 	ra_off = sec->ra_off;
 	ra_ctl = ra_off ? 2 : 0; /* regnum=0, deref_p=(ra_off != 0), reg_p=0 */
 	if (dataword_count >= 2) {
-		UNSAFE_GET_USER_INC(ra_ctl, cur, dataword_size, Efault);
+		GET_INC(sec, ra_ctl, cur, dataword_size, Efault);
 		dataword_count--;
 		if (ra_ctl) {
-			UNSAFE_GET_USER_INC(ra_off, cur, dataword_size, Efault);
+			GET_INC(sec, ra_off, cur, dataword_size, Efault);
 			dataword_count--;
 		} else {
 			/* Padding RA location info */
@@ -276,10 +330,10 @@ __read_flex_fde_fre_datawords(struct sframe_section *sec,
 	fp_off = sec->fp_off;
 	fp_ctl = fp_off ? 2 : 0; /* regnum=0, deref_p=(fp_off != 0), reg_p=0 */
 	if (dataword_count >= 2) {
-		UNSAFE_GET_USER_INC(fp_ctl, cur, dataword_size, Efault);
+		GET_INC(sec, fp_ctl, cur, dataword_size, Efault);
 		dataword_count--;
 		if (fp_ctl) {
-			UNSAFE_GET_USER_INC(fp_off, cur, dataword_size, Efault);
+			GET_INC(sec, fp_off, cur, dataword_size, Efault);
 			dataword_count--;
 		} else {
 			/* Padding FP location info */
@@ -353,11 +407,11 @@ static __always_inline int __read_fre(struct sframe_section *sec,
 	if (fre_addr + addr_size + 1 > sec->fres_end)
 		return -EFAULT;
 
-	UNSAFE_GET_USER_INC(ip_off, cur, addr_size, Efault);
+	GET_INC(sec, ip_off, cur, addr_size, Efault);
 	if (fde_pctype == SFRAME_FDE_PCTYPE_INC && ip_off > fde->func_size)
 		return -EFAULT;
 
-	UNSAFE_GET_USER_INC(info, cur, 1, Efault);
+	GET_INC(sec, info, cur, 1, Efault);
 	dataword_count = SFRAME_V3_FRE_DATAWORD_COUNT(info);
 	dataword_size  = dataword_size_enum_to_size(SFRAME_V3_FRE_DATAWORD_SIZE(info));
 	if (!dataword_size)
@@ -380,7 +434,7 @@ Efault:
 }
 
 static __always_inline int
-sframe_init_cfa_rule_data(struct unwind_user_cfa_rule_data *cfa_rule_data,
+sframe_init_cfa_rule_data(struct unwind_cfa_rule_data *cfa_rule_data,
 			  u32 ctlword, s32 offset)
 {
 	bool deref_p = SFRAME_V3_FLEX_FDE_CTLWORD_DEREF_P(ctlword);
@@ -391,13 +445,13 @@ sframe_init_cfa_rule_data(struct unwind_user_cfa_rule_data *cfa_rule_data,
 
 		switch (regnum) {
 		case SFRAME_REG_SP:
-			cfa_rule_data->rule = UNWIND_USER_CFA_RULE_SP_OFFSET;
+			cfa_rule_data->rule = UNWIND_CFA_RULE_SP_OFFSET;
 			break;
 		case SFRAME_REG_FP:
-			cfa_rule_data->rule = UNWIND_USER_CFA_RULE_FP_OFFSET;
+			cfa_rule_data->rule = UNWIND_CFA_RULE_FP_OFFSET;
 			break;
 		default:
-			cfa_rule_data->rule = UNWIND_USER_CFA_RULE_REG_OFFSET;
+			cfa_rule_data->rule = UNWIND_CFA_RULE_REG_OFFSET;
 			cfa_rule_data->regnum = regnum;
 		}
 	} else {
@@ -405,7 +459,7 @@ sframe_init_cfa_rule_data(struct unwind_user_cfa_rule_data *cfa_rule_data,
 	}
 
 	if (deref_p)
-		cfa_rule_data->rule |= UNWIND_USER_RULE_DEREF;
+		cfa_rule_data->rule |= UNWIND_RULE_DEREF;
 
 	cfa_rule_data->offset = offset;
 
@@ -413,27 +467,27 @@ sframe_init_cfa_rule_data(struct unwind_user_cfa_rule_data *cfa_rule_data,
 }
 
 static __always_inline void
-sframe_init_rule_data(struct unwind_user_rule_data *rule_data,
+sframe_init_rule_data(struct unwind_rule_data *rule_data,
 		      u32 ctlword, s32 offset)
 {
 	bool deref_p = SFRAME_V3_FLEX_FDE_CTLWORD_DEREF_P(ctlword);
 	bool reg_p = SFRAME_V3_FLEX_FDE_CTLWORD_REG_P(ctlword);
 
 	if (!ctlword && !offset) {
-		rule_data->rule = UNWIND_USER_RULE_RETAIN;
+		rule_data->rule = UNWIND_RULE_RETAIN;
 		return;
 	}
 	if (reg_p) {
 		unsigned int regnum = SFRAME_V3_FLEX_FDE_CTLWORD_REGNUM(ctlword);
 
-		rule_data->rule = UNWIND_USER_RULE_REG_OFFSET;
+		rule_data->rule = UNWIND_RULE_REG_OFFSET;
 		rule_data->regnum = regnum;
 	} else {
-		rule_data->rule = UNWIND_USER_RULE_CFA_OFFSET;
+		rule_data->rule = UNWIND_RULE_CFA_OFFSET;
 	}
 
 	if (deref_p)
-		rule_data->rule |= UNWIND_USER_RULE_DEREF;
+		rule_data->rule |= UNWIND_RULE_DEREF;
 
 	rule_data->offset = offset;
 }
@@ -441,7 +495,7 @@ sframe_init_rule_data(struct unwind_user_rule_data *rule_data,
 static __always_inline int __find_fre(struct sframe_section *sec,
 				      struct sframe_fde_internal *fde,
 				      unsigned long ip,
-				      struct unwind_user_frame *frame)
+				      struct unwind_frame *frame)
 {
 	unsigned char fde_pctype = SFRAME_V3_FDE_PCTYPE(fde->info);
 	struct sframe_fre_internal *fre, *prev_fre = NULL;
@@ -501,40 +555,18 @@ static __always_inline int __find_fre(struct sframe_section *sec,
 	return 0;
 }
 
-int sframe_find(unsigned long ip, struct unwind_user_frame *frame)
+static __always_inline int __sframe_find(struct sframe_section *sec,
+					 unsigned long ip,
+					 struct unwind_frame *frame)
 {
-	struct mm_struct *mm = current->mm;
-	struct sframe_section *sec;
 	struct sframe_fde_internal fde;
 	int ret;
 
-	if (!mm)
-		return -EINVAL;
-
-	guard(srcu)(&sframe_srcu);
-
-	sec = mtree_load(&mm->sframe_mt, ip);
-	if (!sec)
-		return -EINVAL;
-
-	if (!user_read_access_begin((void __user *)sec->sframe_start,
-				    sec->sframe_end - sec->sframe_start))
-		return -EFAULT;
-
 	ret = __find_fde(sec, ip, &fde);
 	if (ret)
-		goto end;
+		return ret;
 
-	ret = __find_fre(sec, &fde, ip, frame);
-end:
-	user_read_access_end();
-
-	if (ret == -EFAULT) {
-		dbg_sec("removing bad .sframe section\n");
-		WARN_ON_ONCE(sframe_remove_section(sec->sframe_start));
-	}
-
-	return ret;
+	return __find_fre(sec, &fde, ip, frame);
 }
 
 #ifdef CONFIG_SFRAME_VALIDATION
@@ -657,20 +689,23 @@ static int sframe_validate_section(struct sframe_section *sec) { return 0; }
 #endif /* !CONFIG_SFRAME_VALIDATION */
 
 
-static void free_section(struct sframe_section *sec)
-{
-	dbg_free(sec);
-	kfree(sec);
-}
-
 static int sframe_read_header(struct sframe_section *sec)
 {
 	unsigned long header_end, fdes_start, fdes_end, fres_start, fres_end;
 	struct sframe_header shdr;
 	unsigned int num_fdes;
 
-	if (copy_from_user(&shdr, (void __user *)sec->sframe_start, sizeof(shdr))) {
-		dbg_sec("header usercopy failed\n");
+	switch (sec->sec_type) {
+	case SFRAME_USER:
+		if (copy_from_user(&shdr, (void __user *)sec->sframe_start, sizeof(shdr))) {
+			dbg_sec("header usercopy failed\n");
+			return -EFAULT;
+		}
+		break;
+	case SFRAME_KERNEL:
+		shdr = *(struct sframe_header *)sec->sframe_start;
+		break;
+	default:
 		return -EFAULT;
 	}
 
@@ -717,6 +752,45 @@ static int sframe_read_header(struct sframe_section *sec)
 	return 0;
 }
 
+#ifdef CONFIG_HAVE_UNWIND_USER_SFRAME
+
+int sframe_find_user(unsigned long ip, struct unwind_frame *frame)
+{
+	struct mm_struct *mm = current->mm;
+	struct sframe_section *sec;
+	int ret;
+
+	if (!mm)
+		return -EINVAL;
+
+	guard(srcu)(&sframe_srcu);
+
+	sec = mtree_load(&mm->sframe_mt, ip);
+	if (!sec)
+		return -EINVAL;
+
+	if (!user_read_access_begin((void __user *)sec->sframe_start,
+				    sec->sframe_end - sec->sframe_start))
+		return -EFAULT;
+
+	ret = __sframe_find(sec, ip, frame);
+
+	user_read_access_end();
+
+	if (ret == -EFAULT) {
+		dbg_sec("removing bad .sframe section\n");
+		WARN_ON_ONCE(sframe_remove_section(sec->sframe_start));
+	}
+
+	return ret;
+}
+
+static void free_section(struct sframe_section *sec)
+{
+	dbg_free(sec);
+	kfree(sec);
+}
+
 int sframe_add_section(unsigned long sframe_start, unsigned long sframe_end,
 		       unsigned long text_start, unsigned long text_end)
 {
@@ -753,6 +827,7 @@ int sframe_add_section(unsigned long sframe_start, unsigned long sframe_end,
 	if (!sec)
 		return -ENOMEM;
 
+	sec->sec_type		= SFRAME_USER;
 	sec->sframe_start	= sframe_start;
 	sec->sframe_end		= sframe_end;
 	sec->text_start		= text_start;
@@ -838,3 +913,5 @@ void sframe_free_mm(struct mm_struct *mm)
 
 	mtree_destroy(&mm->sframe_mt);
 }
+
+#endif /* CONFIG_HAVE_UNWIND_USER_SFRAME */

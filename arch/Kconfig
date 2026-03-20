@@ -486,6 +486,9 @@ config AS_SFRAME3
 	def_bool $(as-instr,.cfi_startproc\n.cfi_endproc,-Wa$(comma)--gsframe-3)
 	select AS_SFRAME
 
+config SFRAME_LOOKUP
+	bool
+
 config UNWIND_USER
 	bool
 
@@ -496,6 +499,7 @@ config HAVE_UNWIND_USER_FP
 config HAVE_UNWIND_USER_SFRAME
 	bool
 	select UNWIND_USER
+	select SFRAME_LOOKUP
 
 config SFRAME_VALIDATION
 	bool "Enable .sframe section debugging"

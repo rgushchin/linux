@@ -27,47 +27,6 @@ struct unwind_stacktrace {
 	unsigned long	*entries;
 };
 
-#define UNWIND_USER_RULE_DEREF			BIT(31)
-
-enum unwind_user_cfa_rule {
-	UNWIND_USER_CFA_RULE_SP_OFFSET,		/* CFA = SP + offset */
-	UNWIND_USER_CFA_RULE_FP_OFFSET,		/* CFA = FP + offset */
-	UNWIND_USER_CFA_RULE_REG_OFFSET,	/* CFA = reg + offset */
-	/* DEREF variants */
-	UNWIND_USER_CFA_RULE_REG_OFFSET_DEREF =	/* CFA = *(reg + offset) */
-		UNWIND_USER_CFA_RULE_REG_OFFSET | UNWIND_USER_RULE_DEREF,
-};
-
-struct unwind_user_cfa_rule_data {
-	enum unwind_user_cfa_rule rule;
-	s32 offset;
-	unsigned int regnum;
-};
-
-enum unwind_user_rule {
-	UNWIND_USER_RULE_RETAIN,		/* entity = entity */
-	UNWIND_USER_RULE_CFA_OFFSET,		/* entity = CFA + offset */
-	UNWIND_USER_RULE_REG_OFFSET,		/* entity = register + offset */
-	/* DEREF variants */
-	UNWIND_USER_RULE_CFA_OFFSET_DEREF =	/* entity = *(CFA + offset) */
-		UNWIND_USER_RULE_CFA_OFFSET | UNWIND_USER_RULE_DEREF,
-	UNWIND_USER_RULE_REG_OFFSET_DEREF =	/* entity = *(register + offset) */
-		UNWIND_USER_RULE_REG_OFFSET | UNWIND_USER_RULE_DEREF,
-};
-
-struct unwind_user_rule_data {
-	enum unwind_user_rule rule;
-	s32 offset;
-	unsigned int regnum;
-};
-
-struct unwind_user_frame {
-	struct unwind_user_cfa_rule_data cfa;
-	struct unwind_user_rule_data ra;
-	struct unwind_user_rule_data fp;
-	bool outermost;
-};
-
 struct unwind_user_state {
 	unsigned long				ip;
 	unsigned long				sp;

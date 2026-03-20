@@ -28,7 +28,7 @@ get_user_word(unsigned long *word, unsigned long base, int off, unsigned int ws)
 }
 
 static int unwind_user_next_common(struct unwind_user_state *state,
-				   const struct unwind_user_frame *frame)
+				   const struct unwind_frame *frame)
 {
 	unsigned long cfa, fp, ra;
 
@@ -40,16 +40,16 @@ static int unwind_user_next_common(struct unwind_user_state *state,
 
 	/* Get the Canonical Frame Address (CFA) */
 	switch (frame->cfa.rule) {
-	case UNWIND_USER_CFA_RULE_SP_OFFSET:
+	case UNWIND_CFA_RULE_SP_OFFSET:
 		cfa = state->sp;
 		break;
-	case UNWIND_USER_CFA_RULE_FP_OFFSET:
+	case UNWIND_CFA_RULE_FP_OFFSET:
 		if (state->fp < state->sp)
 			return -EINVAL;
 		cfa = state->fp;
 		break;
-	case UNWIND_USER_CFA_RULE_REG_OFFSET:
-	case UNWIND_USER_CFA_RULE_REG_OFFSET_DEREF:
+	case UNWIND_CFA_RULE_REG_OFFSET:
+	case UNWIND_CFA_RULE_REG_OFFSET_DEREF:
 		if (!state->topmost || unwind_user_get_reg(&cfa, frame->cfa.regnum))
 			return -EINVAL;
 		break;
@@ -58,7 +58,7 @@ static int unwind_user_next_common(struct unwind_user_state *state,
 		return -EINVAL;
 	}
 	cfa += frame->cfa.offset;
-	if (frame->cfa.rule & UNWIND_USER_RULE_DEREF &&
+	if (frame->cfa.rule & UNWIND_RULE_DEREF &&
 	    get_user_word(&cfa, cfa, 0, state->ws))
 		return -EINVAL;
 
@@ -76,16 +76,16 @@ static int unwind_user_next_common(struct unwind_user_state *state,
 
 	/* Get the Return Address (RA) */
 	switch (frame->ra.rule) {
-	case UNWIND_USER_RULE_RETAIN:
+	case UNWIND_RULE_RETAIN:
 		if (!state->topmost || unwind_user_get_ra_reg(&ra))
 			return -EINVAL;
 		break;
 	/* UNWIND_USER_RULE_CFA_OFFSET not implemented on purpose */
-	case UNWIND_USER_RULE_CFA_OFFSET_DEREF:
+	case UNWIND_RULE_CFA_OFFSET_DEREF:
 		ra = cfa + frame->ra.offset;
 		break;
-	case UNWIND_USER_RULE_REG_OFFSET:
-	case UNWIND_USER_RULE_REG_OFFSET_DEREF:
+	case UNWIND_RULE_REG_OFFSET:
+	case UNWIND_RULE_REG_OFFSET_DEREF:
 		if (!state->topmost || unwind_user_get_reg(&ra, frame->ra.regnum))
 			return -EINVAL;
 		ra += frame->ra.offset;
@@ -94,21 +94,21 @@ static int unwind_user_next_common(struct unwind_user_state *state,
 		WARN_ON_ONCE(1);
 		return -EINVAL;
 	}
-	if (frame->ra.rule & UNWIND_USER_RULE_DEREF &&
+	if (frame->ra.rule & UNWIND_RULE_DEREF &&
 	    get_user_word(&ra, ra, 0, state->ws))
 		return -EINVAL;
 
 	/* Get the Frame Pointer (FP) */
 	switch (frame->fp.rule) {
-	case UNWIND_USER_RULE_RETAIN:
+	case UNWIND_RULE_RETAIN:
 		fp = state->fp;
 		break;
 	/* UNWIND_USER_RULE_CFA_OFFSET not implemented on purpose */
-	case UNWIND_USER_RULE_CFA_OFFSET_DEREF:
+	case UNWIND_RULE_CFA_OFFSET_DEREF:
 		fp = cfa + frame->fp.offset;
 		break;
-	case UNWIND_USER_RULE_REG_OFFSET:
-	case UNWIND_USER_RULE_REG_OFFSET_DEREF:
+	case UNWIND_RULE_REG_OFFSET:
+	case UNWIND_RULE_REG_OFFSET_DEREF:
 		if (!state->topmost || unwind_user_get_reg(&fp, frame->fp.regnum))
 			return -EINVAL;
 		fp += frame->fp.offset;
@@ -117,7 +117,7 @@ static int unwind_user_next_common(struct unwind_user_state *state,
 		WARN_ON_ONCE(1);
 		return -EINVAL;
 	}
-	if (frame->fp.rule & UNWIND_USER_RULE_DEREF &&
+	if (frame->fp.rule & UNWIND_RULE_DEREF &&
 	    get_user_word(&fp, fp, 0, state->ws))
 		return -EINVAL;
 
@@ -133,13 +133,13 @@ static int unwind_user_next_fp(struct unwind_user_state *state)
 	struct pt_regs *regs = task_pt_regs(current);
 
 	if (state->topmost && unwind_user_at_function_start(regs)) {
-		const struct unwind_user_frame fp_entry_frame = {
+		const struct unwind_frame fp_entry_frame = {
 			ARCH_INIT_USER_FP_ENTRY_FRAME(state->ws)
 		};
 		return unwind_user_next_common(state, &fp_entry_frame);
 	}
 
-	const struct unwind_user_frame fp_frame = {
+	const struct unwind_frame fp_frame = {
 		ARCH_INIT_USER_FP_FRAME(state->ws)
 	};
 	return unwind_user_next_common(state, &fp_frame);
@@ -147,10 +147,10 @@ static int unwind_user_next_fp(struct unwind_user_state *state)
 
 static int unwind_user_next_sframe(struct unwind_user_state *state)
 {
-	struct unwind_user_frame frame;
+	struct unwind_frame frame;
 
 	/* sframe expects the frame to be local storage */
-	if (sframe_find(state->ip, &frame))
+	if (sframe_find_user(state->ip, &frame))
 		return -ENOENT;
 	return unwind_user_next_common(state, &frame);
 }

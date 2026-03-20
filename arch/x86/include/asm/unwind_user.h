@@ -55,30 +55,30 @@ static inline int unwind_user_get_reg(unsigned long *val, unsigned int regnum)
 
 #define ARCH_INIT_USER_FP_FRAME(ws)			\
 	.cfa		= {				\
-		.rule		= UNWIND_USER_CFA_RULE_FP_OFFSET,\
+		.rule		= UNWIND_CFA_RULE_FP_OFFSET,\
 		.offset		=  2*(ws),		\
 			},				\
 	.ra		= {				\
-		.rule		= UNWIND_USER_RULE_CFA_OFFSET_DEREF,\
+		.rule		= UNWIND_RULE_CFA_OFFSET_DEREF,\
 		.offset		= -1*(ws),		\
 			},				\
 	.fp		= {				\
-		.rule		= UNWIND_USER_RULE_CFA_OFFSET_DEREF,\
+		.rule		= UNWIND_RULE_CFA_OFFSET_DEREF,\
 		.offset		= -2*(ws),		\
 			},				\
 	.outermost	= false,
 
 #define ARCH_INIT_USER_FP_ENTRY_FRAME(ws)		\
 	.cfa		= {				\
-		.rule		= UNWIND_USER_CFA_RULE_SP_OFFSET,\
+		.rule		= UNWIND_CFA_RULE_SP_OFFSET,\
 		.offset		=  1*(ws),		\
 			},				\
 	.ra		= {				\
-		.rule		= UNWIND_USER_RULE_CFA_OFFSET_DEREF,\
+		.rule		= UNWIND_RULE_CFA_OFFSET_DEREF,\
 		.offset		= -1*(ws),		\
 			},				\
 	.fp		= {				\
-		.rule		= UNWIND_USER_RULE_RETAIN,\
+		.rule		= UNWIND_RULE_RETAIN,\
 			},				\
 	.outermost	= false,
 
