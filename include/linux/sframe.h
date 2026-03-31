@@ -64,6 +64,7 @@ struct sframe_section {
 	unsigned long		text_start;
 	unsigned long		text_end;
 
+	bool			fdes_sorted;
 	unsigned long		fdes_start;
 	unsigned long		fres_start;
 	unsigned long		fres_end;
