@@ -13,9 +13,22 @@
 #include <linux/string_helpers.h>
 #include <linux/sframe.h>
 #include <asm/unwind_sframe.h>
+#ifdef CONFIG_SFRAME_UNWINDER
+#include <linux/kallsyms.h>
+#endif
 
 #include "sframe.h"
 #include "sframe_debug.h"
+
+#ifdef CONFIG_SFRAME_UNWINDER
+
+extern char __start_sframe_header[];
+extern char __stop_sframe_header[];
+
+static bool sframe_init __ro_after_init;
+static struct sframe_section kernel_sfsec __ro_after_init;
+
+#endif /* CONFIG_SFRAME_UNWINDER */
 
 struct sframe_fde_internal {
 	unsigned long	func_addr;
@@ -915,3 +928,29 @@ void sframe_free_mm(struct mm_struct *mm)
 }
 
 #endif /* CONFIG_HAVE_UNWIND_USER_SFRAME */
+
+#ifdef CONFIG_SFRAME_UNWINDER
+
+int sframe_find_kernel(unsigned long ip, struct unwind_frame *frame)
+{
+	if (!frame || !sframe_init)
+		return -EINVAL;
+
+	return  __sframe_find(&kernel_sfsec, ip, frame);
+}
+
+void __init init_sframe_table(void)
+{
+	kernel_sfsec.sec_type		= SFRAME_KERNEL;
+	kernel_sfsec.sframe_start	= (unsigned long)__start_sframe_header;
+	kernel_sfsec.sframe_end		= (unsigned long)__stop_sframe_header;
+	kernel_sfsec.text_start		= (unsigned long)_stext;
+	kernel_sfsec.text_end		= (unsigned long)_etext;
+
+	if(WARN_ON(sframe_read_header(&kernel_sfsec)))
+		return;
+
+	sframe_init = true;
+}
+
+#endif /* CONFIG_SFRAME_UNWINDER */
